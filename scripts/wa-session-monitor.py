@@ -221,10 +221,20 @@ async def main():
     async with async_playwright() as p:
         proxy = proxy_for_slot()
         print("Proxy:", "on" if proxy else "off", flush=True)
-        context = await p.chromium.launch_persistent_context(str(DIR / "profile"), headless=True,
-                    viewport={"width": 1280, "height": 1800}, proxy=proxy,
-                    args=["--disable-blink-features=AutomationControlled"],
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
+        context = await p.chromium.launch_persistent_context(
+            str(DIR / "profile"),
+            headless=True,
+            viewport={"width": 1280, "height": 1800},
+            proxy=proxy,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
+            ],
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+        )
         page = context.pages[0] if context.pages else await context.new_page()
         await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
         session_file = DIR / "monitor-session.json"
@@ -262,29 +272,80 @@ async def main():
                     request = json.loads(req.read_text())
                     if request["at"] > last_request:
                         last_request = request["at"]
-                        phone = request["phone"]
-                        if len(phone) == 10:
-                            phone = "91" + phone
+                        raw_phone = str(request.get("phone", "")).strip()
+                        clean_digits = re.sub(r"\D", "", raw_phone)
+                        print(f"[{SLOT}] Received link request for phone: {raw_phone} (digits: {clean_digits})", flush=True)
+                        status({"state": "starting", "phone": clean_digits})
+
+                        print(f"[{SLOT}] Navigating to WhatsApp Web...", flush=True)
                         await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
-                        status({"state": "starting", "phone": phone})
-                        await page.wait_for_timeout(6000)
-                        link_btn = page.locator('text=/Link with phone number|Log in with phone number/i >> visible=true').first
-                        await link_btn.click(timeout=30000)
-                        field = page.locator('input[type="text"], input[inputmode="numeric"], [role="textbox"]').first
+                        await page.wait_for_timeout(5000)
+
+                        print(f"[{SLOT}] Looking for 'Link with phone number' button...", flush=True)
+                        link_btn = page.locator('text=/Link with phone number|Log in with phone number|Link using phone number/i >> visible=true').first
+                        try:
+                            await link_btn.wait_for(state="visible", timeout=20000)
+                            print(f"[{SLOT}] Clicking 'Link with phone number'...", flush=True)
+                            await link_btn.click()
+                            await page.wait_for_timeout(2000)
+                        except Exception as e:
+                            print(f"[{SLOT}] 'Link with phone number' button not found: {e}", flush=True)
+                            await capture_qr(page, clean_digits)
+                            continue
+
+                        national_number = clean_digits
+                        if clean_digits.startswith("91") and len(clean_digits) == 12:
+                            national_number = clean_digits[2:]
+                        elif len(clean_digits) == 10:
+                            national_number = clean_digits
+
+                        print(f"[{SLOT}] Entering phone number: national={national_number}, full={clean_digits}...", flush=True)
+                        try:
+                            country_picker = page.locator('button:has-text("Choose a country"), [data-testid="country-picker"], button:has([data-icon="chevron-down"])').first
+                            if await country_picker.is_visible(timeout=3000):
+                                print(f"[{SLOT}] Country picker found, selecting India...", flush=True)
+                                await country_picker.click()
+                                await page.wait_for_timeout(800)
+                                search_input = page.locator('input[type="text"]').first
+                                if await search_input.is_visible(timeout=3000):
+                                    await search_input.fill("India")
+                                    await page.wait_for_timeout(500)
+                                    india_opt = page.locator('text=/India/i').first
+                                    if await india_opt.is_visible(timeout=3000):
+                                        await india_opt.click()
+                                        await page.wait_for_timeout(800)
+                        except Exception as ce:
+                            print(f"[{SLOT}] Country picker step: {ce}", flush=True)
+
+                        field = page.locator('input[aria-label*="phone" i], input[inputmode="numeric"], input[type="text"]').last
+                        await field.wait_for(state="visible", timeout=15000)
                         await field.click()
                         await field.press("ControlOrMeta+A")
-                        await field.press_sequentially("+" + phone, delay=100)
-                        await page.get_by_role("button", name="Next", exact=True).click()
+                        type_number = national_number if len(national_number) == 10 else clean_digits
+                        print(f"[{SLOT}] Typing number into field: {type_number}", flush=True)
+                        await field.press_sequentially(type_number, delay=80)
+                        await page.wait_for_timeout(1000)
+
+                        print(f"[{SLOT}] Clicking 'Next'...", flush=True)
+                        next_btn = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")').first
+                        await next_btn.click(timeout=10000)
+
+                        print(f"[{SLOT}] Waiting for 8-digit link code...", flush=True)
                         code = page.locator('[data-link-code]').first
                         try:
-                            await code.wait_for(timeout=60000)
+                            await code.wait_for(timeout=45000)
                             value = (await code.get_attribute("data-link-code") or "").replace(",", "")
-                            status({"state": "code", "phone": phone, "code": value})
-                        except Exception:
+                            if value:
+                                print(f"[{SLOT}] >>> SUCCESS! Link code is: {value} <<<", flush=True)
+                                status({"state": "code", "phone": clean_digits, "code": value})
+                            else:
+                                raise ValueError("Empty link code received")
+                        except Exception as code_err:
+                            print(f"[{SLOT}] Link code wait failed: {code_err}. Falling back to QR...", flush=True)
                             qr_btn = page.locator('text=/Log in with QR code|Scan QR code/i').first
                             if await qr_btn.is_visible():
-                                await qr_btn.click(timeout=15000)
-                            await capture_qr(page, phone)
+                                await qr_btn.click(timeout=10000)
+                            await capture_qr(page, clean_digits)
                 elif not connected and current_state() == "qr":
                     await capture_qr(page, None)
             except Exception as exc:
