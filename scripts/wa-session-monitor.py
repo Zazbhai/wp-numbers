@@ -210,17 +210,19 @@ async def check_worker(page, queue, busy):
     while True:
         phone = await queue.get()
         try:
-            print(f"Checking number: {phone}...", flush=True)
+            print(f"\n==================================================", flush=True)
+            print(f"🔍 Checking number: {phone}...", flush=True)
             result = await check_one(page, phone)
-            print(f"Check result for {phone}: {result} (found={result})", flush=True)
+            print(f"🎯 Final check result for {phone}: {result} (is_unregistered={result})", flush=True)
             if result is not None:
                 resp = await asyncio.to_thread(api, "POST", {"phone": phone, "found": result})
-                print(f"Saved result for {phone}: {resp}", flush=True)
+                print(f"💾 Saved result to database for {phone}: {resp}", flush=True)
             else:
-                print(f"Result unclear for {phone}, leaving pending.", flush=True)
+                print(f"⚠️ Result unclear for {phone}, leaving pending.", flush=True)
+            print(f"==================================================\n", flush=True)
         except Exception as exc:
             import traceback
-            print(f"Check failed for {phone}: {exc}", flush=True)
+            print(f"❌ Check failed for {phone}: {exc}", flush=True)
             traceback.print_exc()
         finally:
             busy.discard(phone)
@@ -228,16 +230,32 @@ async def check_worker(page, queue, busy):
 async def check_loop(page, is_connected):
     queue, busy = asyncio.Queue(), set()
     asyncio.create_task(check_worker(page, queue, busy))
+    queue_empty_logged = False
+    last_unconnected_log = 0
     while True:
         try:
-            if is_connected() and queue.qsize() < 1:
+            connected = is_connected()
+            if connected and queue.qsize() < 1:
                 data = await asyncio.to_thread(api, "GET")
-                for row in data.get("numbers", []):
+                nums = data.get("numbers", [])
+                if nums:
+                    print(f"[Queue] Received {len(nums)} pending numbers from database to check.", flush=True)
+                    queue_empty_logged = False
+                elif not queue_empty_logged:
+                    print("[Queue] No pending numbers in database queue right now. Waiting...", flush=True)
+                    queue_empty_logged = True
+                for row in nums:
                     if row["phone"] not in busy:
                         busy.add(row["phone"])
                         queue.put_nowait(row["phone"])
+            elif not connected:
+                import time
+                now = time.time()
+                if now - last_unconnected_log > 15:
+                    print("[Queue] WhatsApp Web is not connected yet; waiting for connection before pulling numbers...", flush=True)
+                    last_unconnected_log = now
         except Exception as exc:
-            print("Queue fetch failed:", type(exc).__name__, flush=True)
+            print("Queue fetch failed:", type(exc).__name__, exc, flush=True)
         await asyncio.sleep(2)
 
 def parse_proxy(raw_line):
@@ -294,21 +312,23 @@ def parse_proxy(raw_line):
 
 def test_proxy(proxy_cfg):
     import urllib.request
-    try:
-        url = f"{proxy_cfg['server']}"
-        clean_host = url.replace("http://", "").replace("https://", "").replace("socks5://", "")
-        if proxy_cfg.get("username") and proxy_cfg.get("password"):
-            proxy_url = f"http://{proxy_cfg['username']}:{proxy_cfg['password']}@{clean_host}"
-        else:
-            proxy_url = f"http://{clean_host}"
-        handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
-        opener = urllib.request.build_opener(handler)
-        req = urllib.request.Request('https://api.ipify.org', headers={'User-Agent': 'Mozilla/5.0'})
-        with opener.open(req, timeout=5) as resp:
-            return resp.status == 200
-    except Exception as e:
-        print(f"Proxy test failed for {proxy_cfg['server']}: {e}", flush=True)
-        return False
+    clean_host = proxy_cfg['server'].replace("http://", "").replace("https://", "").replace("socks5://", "")
+    if proxy_cfg.get("username") and proxy_cfg.get("password"):
+        proxy_url = f"http://{proxy_cfg['username']}:{proxy_cfg['password']}@{clean_host}"
+    else:
+        proxy_url = f"http://{clean_host}"
+
+    for test_url in ["http://api.ipify.org", "http://icanhazip.com", "http://httpbin.org/ip"]:
+        try:
+            handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
+            opener = urllib.request.build_opener(handler)
+            req = urllib.request.Request(test_url, headers={'User-Agent': 'Mozilla/5.0'})
+            with opener.open(req, timeout=4) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            continue
+    return False
 
 def proxy_for_slot():
     """Each slot gets its own sticky residential proxy so WhatsApp doesn't block the server IP."""
@@ -352,23 +372,60 @@ def proxy_for_slot():
     print("Falling back to direct connection so WhatsApp checking can proceed.", flush=True)
     return None
 
+def cleanup_stale_locks(profile_dir: Path):
+    if not profile_dir.exists():
+        return
+    for name in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+        lock_file = profile_dir / name
+        try:
+            if lock_file.exists() or lock_file.is_symlink():
+                lock_file.unlink(missing_ok=True)
+                print(f"[Init] Removed stale Chromium lock file: {name}", flush=True)
+        except Exception:
+            pass
+
+def terminate_existing_monitor():
+    pid_file = DIR / "monitor.pid"
+    if pid_file.exists():
+        try:
+            old_pid = int(pid_file.read_text().strip())
+            if old_pid and old_pid != os.getpid():
+                import signal
+                try:
+                    os.kill(old_pid, signal.SIGTERM)
+                    print(f"[{SLOT}] Terminated previous monitor process (PID {old_pid}) to prevent profile lock conflicts.", flush=True)
+                    import time
+                    time.sleep(1)
+                except (ProcessLookupError, PermissionError):
+                    pass
+        except Exception:
+            pass
+    pid_file.write_text(str(os.getpid()))
+
 async def main():
     DIR.mkdir(parents=True, exist_ok=True)
-    (DIR / "monitor.pid").write_text(str(os.getpid()))
+    print(f"[{SLOT}] [1/4] Starting WhatsApp Session Monitor (PID {os.getpid()})...", flush=True)
+    terminate_existing_monitor()
+    cleanup_stale_locks(DIR / "profile")
+
     async with async_playwright() as p:
+        print(f"[{SLOT}] [2/4] Testing proxy configuration...", flush=True)
         proxy = proxy_for_slot()
-        print("Proxy:", "on" if proxy else "off", flush=True)
+        print(f"[{SLOT}] Proxy status: {'ON (' + proxy['server'] + ')' if proxy else 'OFF (direct connection)'}", flush=True)
 
         context = None
         page = None
         for attempt in range(2):
             active_proxy = proxy if attempt == 0 else None
             if attempt == 1:
-                print("[WARN] Proxy failed in browser. Falling back to direct connection.", flush=True)
+                print(f"[{SLOT}] [WARN] Proxy failed in browser. Retrying with direct connection...", flush=True)
+                cleanup_stale_locks(DIR / "profile")
             try:
+                print(f"[{SLOT}] [3/4] Launching Chromium persistent context (slot {SLOT}, attempt {attempt + 1}/2)...", flush=True)
                 context = await p.chromium.launch_persistent_context(
                     str(DIR / "profile"),
                     headless=True,
+                    timeout=35000,
                     viewport={"width": 1280, "height": 1800},
                     proxy=active_proxy,
                     args=[
@@ -383,48 +440,78 @@ async def main():
                     ],
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
                 )
+                print(f"[{SLOT}] Chromium launched! Navigating to https://web.whatsapp.com...", flush=True)
                 page = context.pages[0] if context.pages else await context.new_page()
                 await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded", timeout=45000)
+                print(f"[{SLOT}] [4/4] WhatsApp Web DOM loaded! Starting session state watcher...", flush=True)
                 break
             except Exception as e:
-                print(f"[Attempt {attempt + 1}] Navigation failed with proxy ({type(e).__name__}): {e}", flush=True)
+                print(f"[{SLOT}] [Attempt {attempt + 1}] Launch/navigation failed ({type(e).__name__}): {e}", flush=True)
                 if context:
                     try:
                         await context.close()
                     except Exception:
                         pass
+                cleanup_stale_locks(DIR / "profile")
                 if attempt == 1:
                     raise
+
         session_file = DIR / "monitor-session.json"
         session = json.loads(session_file.read_text()) if session_file.exists() else None
+        if session:
+            print(f"[{SLOT}] Restored previous session state: {session.get('state')}", flush=True)
         import time
         last_request = time.time() * 1000 - 120000
         logout_checks = 0
-        asyncio.create_task(check_loop(page, lambda: bool(session and session["state"] == "connected")))
+        asyncio.create_task(check_loop(page, lambda: bool(session and session.get("state") == "connected")))
+
+        last_state_log = None
+        sync_tick = 0
         while True:
+            sync_tick += 1
             try:
                 connected = await page.locator('#pane-side').is_visible()
                 login_screen = await page.locator('text=/Link with phone number|Log in with phone number/i').first.is_visible()
+                canvas_visible = await page.locator('canvas').first.is_visible()
+
                 if connected:
-                    if not session or session["state"] == "logged_out":
+                    if not session or session.get("state") != "connected":
                         session = {"id": str(uuid.uuid4()), "state": "connected"}
+                        session_file.write_text(json.dumps(session))
+                        print(f"[{SLOT}] ✅ Connected to WhatsApp Web! Active session ID: {session['id']}", flush=True)
                     logout_checks = 0
-                    session_file.write_text(json.dumps(session))
                     status({"state": "connected"})
                     await asyncio.to_thread(report, session["id"], "connected")
-                elif session and session["state"] == "connected" and login_screen:
-                    logout_checks += 1
-                    if logout_checks >= 3:
-                        session["state"] = "logged_out"
-                        session_file.write_text(json.dumps(session))
-                        status({"state": "error", "error": "WhatsApp logout ho gaya; dobara link karein."})
-                        await asyncio.to_thread(report, session["id"], "logged_out")
-                elif session and session["state"] == "logged_out":
-                    await asyncio.to_thread(report, session["id"], "logged_out")
+                    if last_state_log != "connected":
+                        print(f"[{SLOT}] ✅ WhatsApp Web is CONNECTED! (#pane-side active) - Ready to process queue.", flush=True)
+                        last_state_log = "connected"
+
+                elif login_screen or canvas_visible:
+                    if session and session.get("state") == "connected":
+                        logout_checks += 1
+                        if logout_checks >= 3:
+                            session["state"] = "logged_out"
+                            session_file.write_text(json.dumps(session))
+                            status({"state": "error", "error": "WhatsApp logout ho gaya; dobara link karein."})
+                            print(f"[{SLOT}] ⚠️ WhatsApp Web has logged out. Please relink at /link", flush=True)
+                            await asyncio.to_thread(report, session["id"], "logged_out")
+                            last_state_log = "logged_out"
+                    else:
+                        if last_state_log != "login_screen":
+                            print(f"[{SLOT}] 📱 WhatsApp Web is NOT LINKED yet.", flush=True)
+                            print(f"[{SLOT}] 👉 Open http://<vps-ip>:8080/link to scan QR or enter phone number.", flush=True)
+                            last_state_log = "login_screen"
+                        if current_state() == "qr" or canvas_visible:
+                            await capture_qr(page, None)
+
                 else:
-                    logout_checks = 0
-                    if session and session["state"] == "connected":
-                        status({"state": "connected"})
+                    if sync_tick % 5 == 1:
+                        try:
+                            title = await page.title()
+                        except Exception:
+                            title = "WhatsApp"
+                        print(f"[{SLOT}] ⏳ Waiting for WhatsApp Web to sync chats... (page title: '{title}')", flush=True)
+
                 req = DIR / "link-request.json"
                 if req.exists():
                     request = json.loads(req.read_text())
