@@ -140,37 +140,45 @@ async def check_one(page, phone):
         return None
 
     first_trigger_at = None
-    for _ in range(120):  # up to ~36s (120 × 0.3s)
-        # 1. Handle "Use here" prompt if another window stole session
-        use_here = page.locator('button:has-text("Use Here"), div[role="button"]:has-text("Use Here")').first
+    for tick in range(120):  # up to ~36s (120 × 0.3s)
+        # 1. Handle "Continue to Chat" / "Use WhatsApp Web" intermediate landing button
+        continue_btn = page.locator('text=/Continue to chat|Use WhatsApp Web/i').first
+        if await continue_btn.is_visible():
+            print(f"[{phone}] Intermediate 'Continue to Chat' prompt found, clicking...", flush=True)
+            await safe_click(continue_btn, page, "Continue to chat")
+            await asyncio.sleep(1)
+            continue
+
+        # 2. Handle "Use here" prompt if another window stole session
+        use_here = page.locator('button:has-text("Use Here"), div[role="button"]:has-text("Use Here"), text=/Use here/i').first
         if await use_here.is_visible():
             print(f"[{phone}] 'Use here' prompt detected, taking session...", flush=True)
             await safe_click(use_here, page, "Use here")
             await asyncio.sleep(1)
             continue
 
-        # 2. Check for chat window (Number IS registered on WhatsApp)
+        # 3. Check for chat window (Number IS registered on WhatsApp)
         chat_box = page.locator('#main, footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]').first
         if await chat_box.is_visible():
             print(f"[{phone}] Chat box visible (#main) -> Number IS registered on WhatsApp", flush=True)
             return False
 
-        # 3. Check for invalid / not on WhatsApp modal dialog (Number is NOT registered on WhatsApp)
-        dialog = page.locator('[role="dialog"], [role="alertdialog"], div[data-animate-modal-popup="true"], div[data-testid="popup-contents"]').first
-        if await dialog.is_visible():
+        # 4. Check for invalid / not on WhatsApp message anywhere on page or modal (Number is NOT registered)
+        unreg_el = page.locator('text=/isn.t on WhatsApp|not on WhatsApp|invalid|Invite to WhatsApp/i').first
+        if await unreg_el.is_visible():
             try:
-                text = (await dialog.inner_text()).strip()
+                text = (await unreg_el.inner_text()).strip()
             except Exception:
                 text = ""
             if text and TRIGGER.search(text):
                 if first_trigger_at is None:
-                    print(f"[{phone}] Trigger detected in dialog: '{text}'. Confirming...", flush=True)
+                    print(f"[{phone}] Unregistered text detected: '{text}'. Confirming...", flush=True)
                     first_trigger_at = asyncio.get_event_loop().time()
                 else:
                     elapsed = asyncio.get_event_loop().time() - first_trigger_at
                     if elapsed >= 2.0:
                         print(f"[{phone}] Dialog confirmed for 2s! -> UNREGISTERED on WhatsApp! 🎉", flush=True)
-                        ok_btn = dialog.locator('button:has-text("OK"), div[role="button"]:has-text("OK")').first
+                        ok_btn = page.locator('button:has-text("OK"), div[role="button"]:has-text("OK")').first
                         if await ok_btn.is_visible():
                             await safe_click(ok_btn, page, "OK button")
                         return True
@@ -181,6 +189,14 @@ async def check_one(page, phone):
         elif first_trigger_at is not None:
             first_trigger_at = None
 
+        # 5. Periodic status snippet every 4.5 seconds for visibility
+        if tick > 0 and tick % 15 == 0:
+            try:
+                body_snippet = " ".join((await page.locator("body").inner_text()).split())[:120]
+                print(f"[{phone}] [t={tick * 0.3:.1f}s] Current page text: '{body_snippet}'", flush=True)
+            except Exception:
+                pass
+
         await asyncio.sleep(0.3)
 
     print(f"[{phone}] Check timed out after 36s. Saving debug screenshot...", flush=True)
@@ -190,8 +206,7 @@ async def check_one(page, phone):
         pass
     return None
 
-async def check_worker(context, queue, busy):
-    page = await context.new_page()
+async def check_worker(page, queue, busy):
     while True:
         phone = await queue.get()
         try:
@@ -210,14 +225,20 @@ async def check_worker(context, queue, busy):
         finally:
             busy.discard(phone)
 
-async def check_loop(context, is_connected):
+async def check_loop(page, is_connected):
     queue, busy = asyncio.Queue(), set()
-    for _ in range(CHECK_WORKERS):
-        asyncio.create_task(check_worker(context, queue, busy))
+    asyncio.create_task(check_worker(page, queue, busy))
     while True:
         try:
-            if is_connected() and queue.qsize() < CHECK_WORKERS:
+            if is_connected() and queue.qsize() < 1:
                 data = await asyncio.to_thread(api, "GET")
+                for row in data.get("numbers", []):
+                    if row["phone"] not in busy:
+                        busy.add(row["phone"])
+                        queue.put_nowait(row["phone"])
+        except Exception as exc:
+            print("Queue fetch failed:", type(exc).__name__, flush=True)
+        await asyncio.sleep(2)
                 for row in data.get("numbers", []):
                     if row["phone"] not in busy:
                         busy.add(row["phone"])
@@ -289,11 +310,9 @@ def test_proxy(proxy_cfg):
             proxy_url = f"http://{clean_host}"
         handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
         opener = urllib.request.build_opener(handler)
-        req = urllib.request.Request('https://web.whatsapp.com', headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
-        })
-        with opener.open(req, timeout=7) as resp:
-            return resp.status in (200, 301, 302, 403)
+        req = urllib.request.Request('https://api.ipify.org', headers={'User-Agent': 'Mozilla/5.0'})
+        with opener.open(req, timeout=5) as resp:
+            return resp.status == 200
     except Exception as e:
         print(f"Proxy test failed for {proxy_cfg['server']}: {e}", flush=True)
         return False
@@ -388,7 +407,7 @@ async def main():
         import time
         last_request = time.time() * 1000 - 120000
         logout_checks = 0
-        asyncio.create_task(check_loop(context, lambda: bool(session and session["state"] == "connected")))
+        asyncio.create_task(check_loop(page, lambda: bool(session and session["state"] == "connected")))
         while True:
             try:
                 connected = await page.locator('#pane-side').is_visible()
