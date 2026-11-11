@@ -239,13 +239,6 @@ async def check_loop(page, is_connected):
         except Exception as exc:
             print("Queue fetch failed:", type(exc).__name__, flush=True)
         await asyncio.sleep(2)
-                for row in data.get("numbers", []):
-                    if row["phone"] not in busy:
-                        busy.add(row["phone"])
-                        queue.put_nowait(row["phone"])
-        except Exception as exc:
-            print("Queue fetch failed:", type(exc).__name__, flush=True)
-        await asyncio.sleep(2)
 
 def parse_proxy(raw_line):
     line = raw_line.strip()
