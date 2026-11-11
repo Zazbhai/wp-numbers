@@ -92,6 +92,32 @@ def api(method, body=None):
     with urlopen(request, timeout=120) as response:
         return json.load(response)
 
+async def safe_click(locator, page=None, name="element"):
+    """Robust click that bypasses viewport boundaries and custom scroll containers."""
+    try:
+        await locator.scroll_into_view_if_needed(timeout=2000)
+    except Exception:
+        pass
+    try:
+        await locator.click(force=True, timeout=5000)
+        return True
+    except Exception:
+        pass
+    try:
+        await locator.dispatch_event("click")
+        return True
+    except Exception:
+        pass
+    if page:
+        try:
+            handle = await locator.element_handle(timeout=2000)
+            if handle:
+                await page.evaluate("(el) => el.click()", handle)
+                return True
+        except Exception:
+            pass
+    return False
+
 TRIGGER = re.compile(r"isn.t on WhatsApp|not on WhatsApp|invalid|Invite to WhatsApp", re.I)
 CHECK_WORKERS = 3
 
@@ -285,11 +311,13 @@ async def main():
                         link_btn = page.locator('text=/Link with phone number|Log in with phone number|Link using phone number/i >> visible=true').first
                         try:
                             await link_btn.wait_for(state="visible", timeout=20000)
-                            print(f"[{SLOT}] Clicking 'Link with phone number'...", flush=True)
-                            await link_btn.click()
+                            print(f"[{SLOT}] Clicking 'Link with phone number' (with safe_click)...", flush=True)
+                            clicked = await safe_click(link_btn, page, "Link with phone number")
+                            if not clicked:
+                                raise RuntimeError("Failed to click Link with phone number button")
                             await page.wait_for_timeout(2000)
                         except Exception as e:
-                            print(f"[{SLOT}] 'Link with phone number' button not found: {e}", flush=True)
+                            print(f"[{SLOT}] 'Link with phone number' button error: {e}", flush=True)
                             await capture_qr(page, clean_digits)
                             continue
 
@@ -304,7 +332,7 @@ async def main():
                             country_picker = page.locator('button:has-text("Choose a country"), [data-testid="country-picker"], button:has([data-icon="chevron-down"])').first
                             if await country_picker.is_visible(timeout=3000):
                                 print(f"[{SLOT}] Country picker found, selecting India...", flush=True)
-                                await country_picker.click()
+                                await safe_click(country_picker, page, "Country picker")
                                 await page.wait_for_timeout(800)
                                 search_input = page.locator('input[type="text"]').first
                                 if await search_input.is_visible(timeout=3000):
@@ -312,14 +340,14 @@ async def main():
                                     await page.wait_for_timeout(500)
                                     india_opt = page.locator('text=/India/i').first
                                     if await india_opt.is_visible(timeout=3000):
-                                        await india_opt.click()
+                                        await safe_click(india_opt, page, "India option")
                                         await page.wait_for_timeout(800)
                         except Exception as ce:
                             print(f"[{SLOT}] Country picker step: {ce}", flush=True)
 
                         field = page.locator('input[aria-label*="phone" i], input[inputmode="numeric"], input[type="text"]').last
                         await field.wait_for(state="visible", timeout=15000)
-                        await field.click()
+                        await safe_click(field, page, "Phone field")
                         await field.press("ControlOrMeta+A")
                         type_number = national_number if len(national_number) == 10 else clean_digits
                         print(f"[{SLOT}] Typing number into field: {type_number}", flush=True)
@@ -328,7 +356,7 @@ async def main():
 
                         print(f"[{SLOT}] Clicking 'Next'...", flush=True)
                         next_btn = page.locator('button:has-text("Next"), div[role="button"]:has-text("Next")').first
-                        await next_btn.click(timeout=10000)
+                        await safe_click(next_btn, page, "Next button")
 
                         print(f"[{SLOT}] Waiting for 8-digit link code...", flush=True)
                         code = page.locator('[data-link-code]').first
