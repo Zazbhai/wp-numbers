@@ -119,37 +119,73 @@ async def safe_click(locator, page=None, name="element"):
     return False
 
 TRIGGER = re.compile(r"isn.t on WhatsApp|not on WhatsApp|invalid|Invite to WhatsApp", re.I)
-CHECK_WORKERS = 3
+CHECK_WORKERS = 1
 
 async def check_one(page, phone):
     """Returns True (not on WhatsApp), False (on WhatsApp) or None (unclear, keep pending).
     
-    Uses in-process double-confirmation: if the trigger dialog fires, we wait 3 seconds
+    Uses in-process double-confirmation: if the trigger dialog fires, we wait 2 seconds
     and re-verify before concluding unregistered. This eliminates false positives from
     transient WhatsApp Web loading states.
     """
     clean_phone = phone.lstrip('+')
-    await page.goto(f"https://web.whatsapp.com/send?phone={clean_phone}", wait_until="domcontentloaded", timeout=45000)
+    url = f"https://web.whatsapp.com/send?phone={clean_phone}"
+    print(f"[{phone}] Opening {url}...", flush=True)
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    except Exception as e:
+        print(f"[{phone}] Navigation failed: {e}", flush=True)
+        return None
+
     first_trigger_at = None
-    for _ in range(200):  # up to ~60s (200 × 0.3s)
-        if await page.locator('footer div[contenteditable="true"]').first.is_visible():
-            # Chat input box appeared → number IS registered on WhatsApp
+    for _ in range(120):  # up to ~36s (120 × 0.3s)
+        # 1. Handle "Use here" prompt if another window stole session
+        use_here = page.locator('button:has-text("Use Here"), div[role="button"]:has-text("Use Here")').first
+        if await use_here.is_visible():
+            print(f"[{phone}] 'Use here' prompt detected, taking session...", flush=True)
+            await safe_click(use_here, page, "Use here")
+            await asyncio.sleep(1)
+            continue
+
+        # 2. Check for chat window (Number IS registered on WhatsApp)
+        chat_box = page.locator('#main, footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]').first
+        if await chat_box.is_visible():
+            print(f"[{phone}] Chat box visible (#main) -> Number IS registered on WhatsApp", flush=True)
             return False
-        dialog = page.locator('[role="dialog"]').first
-        if await dialog.is_visible() and TRIGGER.search(await dialog.inner_text()):
-            if first_trigger_at is None:
-                # First detection — record time and keep polling for 3 more seconds
-                first_trigger_at = asyncio.get_event_loop().time()
-            else:
-                elapsed = asyncio.get_event_loop().time() - first_trigger_at
-                if elapsed >= 3.0:
-                    # Trigger dialog persisted for 3+ seconds → confirmed unregistered
-                    return True
-                # Still within 3s window, keep checking for chat input
+
+        # 3. Check for invalid / not on WhatsApp modal dialog (Number is NOT registered on WhatsApp)
+        dialog = page.locator('[role="dialog"], [role="alertdialog"], div[data-animate-modal-popup="true"], div[data-testid="popup-contents"]').first
+        if await dialog.is_visible():
+            try:
+                text = (await dialog.inner_text()).strip()
+            except Exception:
+                text = ""
+            if text and TRIGGER.search(text):
+                if first_trigger_at is None:
+                    print(f"[{phone}] Trigger detected in dialog: '{text}'. Confirming...", flush=True)
+                    first_trigger_at = asyncio.get_event_loop().time()
+                else:
+                    elapsed = asyncio.get_event_loop().time() - first_trigger_at
+                    if elapsed >= 2.0:
+                        print(f"[{phone}] Dialog confirmed for 2s! -> UNREGISTERED on WhatsApp! 🎉", flush=True)
+                        ok_btn = dialog.locator('button:has-text("OK"), div[role="button"]:has-text("OK")').first
+                        if await ok_btn.is_visible():
+                            await safe_click(ok_btn, page, "OK button")
+                        return True
+            elif "starting chat" in text.lower() or "connecting" in text.lower() or "loading" in text.lower():
+                pass
+            elif text:
+                print(f"[{phone}] Dialog text: '{text}' (waiting...)", flush=True)
         elif first_trigger_at is not None:
-            # Dialog disappeared — could be a transient render; reset to avoid false positive
             first_trigger_at = None
+
         await asyncio.sleep(0.3)
+
+    print(f"[{phone}] Check timed out after 36s. Saving debug screenshot...", flush=True)
+    try:
+        await page.screenshot(path=str(DIR / "check-timeout.png"))
+    except Exception:
+        pass
     return None
 
 async def check_worker(context, queue, busy):
