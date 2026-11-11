@@ -1,0 +1,453 @@
+[
+  {
+    "phone": "+917408144868",
+    "created_at": "2026-11-10T10:14:07.779Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "BxCeVVz10IMwPMUc",
+    "status": "available",
+    "updated_at": "2026-11-10T10:19:19.845Z",
+    "first_found_at": "2026-11-10T10:16:44.320Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918275389270",
+    "created_at": "2026-11-10T10:14:04.639Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "9Nnzd9ckb9koBH3c",
+    "status": "available",
+    "updated_at": "2026-11-10T10:19:07.783Z",
+    "first_found_at": "2026-11-10T10:14:37.092Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917898210718",
+    "created_at": "2026-11-10T10:14:04.069Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "ln6cJys87Jbw2bvN",
+    "status": "available",
+    "updated_at": "2026-11-10T10:21:14.850Z",
+    "first_found_at": "2026-11-10T10:21:03.567Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918434002229",
+    "created_at": "2026-11-10T10:12:40.338Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "fsBLiBWccNcY0cth",
+    "status": "available",
+    "updated_at": "2026-11-10T10:18:54.577Z",
+    "first_found_at": "2026-11-10T10:17:21.836Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919243509712",
+    "created_at": "2026-11-10T10:00:19.687Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "dvx0lvUbZ1Pob9Wo",
+    "status": "available",
+    "updated_at": "2026-11-10T10:12:46.939Z",
+    "first_found_at": "2026-11-10T10:10:41.963Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917055586245",
+    "created_at": "2026-11-10T10:00:17.068Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "gs1nfQhKX6xR8cBs",
+    "status": "available",
+    "updated_at": "2026-11-11T08:37:50.602Z",
+    "first_found_at": "2026-11-10T10:00:47.631Z",
+    "verify_count": 2,
+    "active_order_id": null,
+    "bought_at": "2026-11-11T08:37:47.891Z",
+    "owner_user_id": null,
+    "wallet_purchase_id": "WAL-3FFD5A9E-E428-4255-A6FD-1CBE632E197D"
+  },
+  {
+    "phone": "+918960538706",
+    "created_at": "2026-11-10T08:59:24.968Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "YdFgyq1KIlJ0JHto",
+    "status": "available",
+    "updated_at": "2026-11-10T09:04:16.548Z",
+    "first_found_at": "2026-11-10T09:00:18.533Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919531800807",
+    "created_at": "2026-11-10T08:58:41.011Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "t73yJ6pVWgC1PROV",
+    "status": "available",
+    "updated_at": "2026-11-10T09:02:37.067Z",
+    "first_found_at": "2026-11-10T09:02:07.981Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919905791024",
+    "created_at": "2026-11-10T08:58:26.823Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "YeKbvhnfX64sgOWK",
+    "status": "available",
+    "updated_at": "2026-11-10T09:01:31.899Z",
+    "first_found_at": "2026-11-10T09:00:40.409Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918140855268",
+    "created_at": "2026-11-10T08:56:24.829Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "US1Z9LJrdzJhS6kH",
+    "status": "available",
+    "updated_at": "2026-11-10T09:01:19.805Z",
+    "first_found_at": "2026-11-10T08:59:38.142Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919277087182",
+    "created_at": "2026-11-09T15:01:37.415Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "hYWg5irNwcSF2Siv",
+    "status": "available",
+    "updated_at": "2026-11-09T15:02:02.406Z",
+    "first_found_at": "2026-11-09T15:01:50.700Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919801835981",
+    "created_at": "2026-11-07T17:49:02.276Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "UdbQtIpPUOFB0a3M",
+    "status": "available",
+    "updated_at": "2026-11-07T17:50:15.274Z",
+    "first_found_at": "2026-11-07T17:49:44.882Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917873658115",
+    "created_at": "2026-11-07T17:42:28.267Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "wVAcGhjQZOphmWTX",
+    "status": "available",
+    "updated_at": "2026-11-07T17:44:42.624Z",
+    "first_found_at": "2026-11-07T17:43:21.187Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917084716958",
+    "created_at": "2026-11-07T16:15:43.196Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "7rj4s2HOxFTla8DT",
+    "status": "available",
+    "updated_at": "2026-11-07T17:40:19.809Z",
+    "first_found_at": "2026-11-07T16:16:36.881Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919252118454",
+    "created_at": "2026-11-07T16:12:55.047Z",
+    "note": "Insufficient wallet balance on FurySMS",
+    "provider_id": "wfWa3OHs59jPL1UF",
+    "status": "available",
+    "updated_at": "2026-11-09T14:21:28.311Z",
+    "first_found_at": "2026-11-07T16:15:39.893Z",
+    "verify_count": 2,
+    "active_order_id": null
+  },
+  {
+    "phone": "+918010589816",
+    "created_at": "2026-11-07T16:12:40.806Z",
+    "note": "Insufficient wallet balance on FurySMS",
+    "provider_id": "f6JJTF3okbpYylQN",
+    "status": "available",
+    "updated_at": "2026-11-09T14:21:41.873Z",
+    "first_found_at": "2026-11-07T16:13:48.496Z",
+    "verify_count": 2,
+    "active_order_id": null
+  },
+  {
+    "phone": "+919335316643",
+    "created_at": "2026-11-07T16:12:40.546Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "z5z9vAZ6EqTQqDRi",
+    "status": "available",
+    "updated_at": "2026-11-07T16:14:57.974Z",
+    "first_found_at": "2026-11-07T16:13:40.901Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918298860914",
+    "created_at": "2026-11-07T15:54:27.619Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "p4l7OxLzvq8r8Iwz",
+    "status": "available",
+    "updated_at": "2026-11-07T16:05:44.266Z",
+    "first_found_at": "2026-11-07T15:55:39.236Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917089970147",
+    "created_at": "2026-11-07T15:50:43.555Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "ABVAxwknjrCc1JV8",
+    "status": "available",
+    "updated_at": "2026-11-10T10:00:57.751Z",
+    "first_found_at": "2026-11-07T15:51:35.202Z",
+    "verify_count": 2,
+    "active_order_id": null,
+    "bought_at": "2026-11-10T10:00:46.601Z",
+    "owner_user_id": null,
+    "wallet_purchase_id": "WAL-83AF8019-796B-4DB4-A080-6E34909ECAAF"
+  },
+  {
+    "phone": "+919172209417",
+    "created_at": "2026-11-07T15:47:48.657Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "MDr4UooRyqemFcSy",
+    "status": "available",
+    "updated_at": "2026-11-07T15:58:24.238Z",
+    "first_found_at": "2026-11-07T15:50:16.443Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918057576542",
+    "created_at": "2026-11-07T15:32:59.857Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "kIgZzLvHfIWJISfN",
+    "status": "available",
+    "updated_at": "2026-11-07T15:51:42.940Z",
+    "first_found_at": "2026-11-07T15:34:28.083Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918260725826",
+    "created_at": "2026-11-07T15:32:48.782Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "nAbvWKzu7fCWk3gw",
+    "status": "available",
+    "updated_at": "2026-11-07T15:50:29.282Z",
+    "first_found_at": "2026-11-07T15:36:49.489Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917631775891",
+    "created_at": "2026-11-07T15:32:40.788Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "DvIm7KLdLtNPessU",
+    "status": "available",
+    "updated_at": "2026-11-07T16:05:23.020Z",
+    "first_found_at": "2026-11-07T15:33:40.642Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918127253036",
+    "created_at": "2026-11-07T15:32:01.685Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "AJmhdzhF3ErCHxHU",
+    "status": "available",
+    "updated_at": "2026-11-07T15:48:05.984Z",
+    "first_found_at": "2026-11-07T15:33:11.397Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918002172880",
+    "created_at": "2026-11-07T15:29:58.309Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "MAS85jYlgOm7DTIN",
+    "status": "available",
+    "updated_at": "2026-11-07T15:45:01.951Z",
+    "first_found_at": "2026-11-07T15:31:00.818Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919187094101",
+    "created_at": "2026-11-07T15:15:12.917Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "rCSPFj9yty9xBdA5",
+    "status": "available",
+    "updated_at": "2026-11-07T15:30:43.770Z",
+    "first_found_at": "2026-11-07T15:18:02.136Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919022508523",
+    "created_at": "2026-11-07T15:13:38.029Z",
+    "note": "Double-verified unregistered (Available in Marketplace)",
+    "provider_id": "aGGHMF8nCriAsYgz",
+    "status": "available",
+    "updated_at": "2026-11-07T15:19:52.481Z",
+    "first_found_at": "2026-11-07T15:16:11.366Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919720304299",
+    "created_at": "2026-11-07T15:07:41.111Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "aIuXApO0fXCwdiai",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "first_found_at": "2026-11-07T15:08:46.299Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+916209021647",
+    "created_at": "2026-11-07T15:03:11.012Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "oUXUW3lTFRu6dSCI",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919485993157",
+    "created_at": "2026-11-07T15:00:16.867Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "LKUXU1TAKBShTYBM",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919966178240",
+    "created_at": "2026-11-07T14:57:05.890Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "E1cq75AqZSl18KQu",
+    "status": "available",
+    "updated_at": "2026-11-07T17:38:47.429Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918975616201",
+    "created_at": "2026-11-07T14:55:06.267Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "jWyNYg4Hzojn18UL",
+    "status": "available",
+    "updated_at": "2026-11-07T15:10:23.163Z",
+    "verify_count": 2,
+    "active_order_id": null,
+    "bought_at": "2026-11-07T15:09:45.024Z"
+  },
+  {
+    "phone": "+917303375771",
+    "created_at": "2026-11-07T14:51:20.863Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "gyhuxI4Bm0DbIa4R",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919448699318",
+    "created_at": "2026-11-07T14:50:42.111Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "IOcAdqBIiQ8QqHfy",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919720843515",
+    "created_at": "2026-11-07T14:49:19.326Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "v92KzpA60OTsrXLb",
+    "status": "available",
+    "updated_at": "2026-11-10T08:56:16.780Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919621783907",
+    "created_at": "2026-11-07T14:41:06.623Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "62gCfWDA81ta8Fiv",
+    "status": "available",
+    "updated_at": "2026-11-07T17:38:21.589Z",
+    "active_order_id": null,
+    "bought_at": "2026-11-07T14:43:03.979Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919424629662",
+    "created_at": "2026-11-07T14:40:47.794Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "K0e7XzFfnLZ7UGA9",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "active_order_id": null,
+    "bought_at": "2026-11-07T14:41:21.698Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+917830379145",
+    "created_at": "2026-11-07T14:37:46.091Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "RzfR8YMqkRDaVYKt",
+    "status": "available",
+    "updated_at": "2026-11-07T18:06:58.194Z",
+    "active_order_id": null,
+    "bought_at": "2026-11-07T18:06:54.860Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+919584493310",
+    "created_at": "2026-11-07T14:36:41.205Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "szHfzCecMI9NhKiZ",
+    "status": "available",
+    "updated_at": "2026-11-07T17:48:38.363Z",
+    "active_order_id": null,
+    "bought_at": "2026-11-07T14:48:54.830Z",
+    "verify_count": 2
+  },
+  {
+    "phone": "+918354935147",
+    "created_at": "2026-11-07T14:26:46.776Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "V4Ipf7MEBwa740vZ",
+    "status": "available",
+    "updated_at": "2026-11-10T10:14:06.324Z",
+    "active_order_id": null,
+    "bought_at": "2026-11-10T09:29:09.886Z",
+    "verify_count": 2,
+    "owner_user_id": null
+  },
+  {
+    "phone": "+919546837128",
+    "created_at": "2026-11-05T17:27:14.993Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "l72pNhZhswxVMekS",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "active_order_id": null,
+    "verify_count": 2
+  },
+  {
+    "phone": "+918539927186",
+    "created_at": "2026-11-05T17:09:36.600Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "CY8UcHEXQcIC2l8a",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "active_order_id": null,
+    "verify_count": 2
+  },
+  {
+    "phone": "+918534808050",
+    "created_at": "2026-11-05T17:09:35.343Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "by8hHEGtt9Nl6eGy",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "active_order_id": null,
+    "verify_count": 2
+  },
+  {
+    "phone": "+917409461139",
+    "created_at": "2026-11-05T17:09:34.599Z",
+    "note": "Restored to available (admin)",
+    "provider_id": "PSo8F4rSqAJtQTPd",
+    "status": "available",
+    "updated_at": "2026-11-07T15:09:09.559Z",
+    "active_order_id": null,
+    "verify_count": 2
+  }
+]

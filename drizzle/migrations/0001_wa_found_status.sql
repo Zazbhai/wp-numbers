@@ -1,0 +1,2 @@
+ALTER TABLE public.wa_check_numbers DROP CONSTRAINT IF EXISTS wa_check_numbers_status_check;
+ALTER TABLE public.wa_check_numbers ADD CONSTRAINT wa_check_numbers_status_check CHECK (status IN ('pending','found','sent','skipped'));

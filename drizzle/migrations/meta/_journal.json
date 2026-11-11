@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793358211970,
+      "tag": "0000_register_checker_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793359495622,
+      "tag": "0001_wa_found_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793366589969,
+      "tag": "0002_whatsapp_session_logout_alerts",
+      "breakpoints": true
+    }
+  ]
+}

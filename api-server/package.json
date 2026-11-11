@@ -1,0 +1,26 @@
+{
+  "name": "fury-sms-api-server",
+  "version": "1.0.0",
+  "description": "Standalone FurySMS-compatible Public SMS API Gateway Server",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node test-api.js"
+  },
+  "keywords": [
+    "sms",
+    "otp",
+    "api",
+    "furysms",
+    "whatsapp"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mongodb": "^6.12.0"
+  }
+}
+

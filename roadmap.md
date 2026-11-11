@@ -1,0 +1,3 @@
+- [x] Use only new residential proxy list (old removed)
+- [x] Auto-switch to next proxy when WhatsApp won't load
+- [ ] WhatsApp code via proxy — blocked: WhatsApp still won't give code/QR for this number
