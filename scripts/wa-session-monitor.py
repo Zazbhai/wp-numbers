@@ -289,9 +289,11 @@ def test_proxy(proxy_cfg):
             proxy_url = f"http://{clean_host}"
         handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
         opener = urllib.request.build_opener(handler)
-        req = urllib.request.Request('https://api.ipify.org', headers={'User-Agent': 'Mozilla/5.0'})
-        with opener.open(req, timeout=5) as resp:
-            return resp.status == 200
+        req = urllib.request.Request('https://web.whatsapp.com', headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
+        })
+        with opener.open(req, timeout=7) as resp:
+            return resp.status in (200, 301, 302, 403)
     except Exception as e:
         print(f"Proxy test failed for {proxy_cfg['server']}: {e}", flush=True)
         return False
@@ -344,22 +346,43 @@ async def main():
     async with async_playwright() as p:
         proxy = proxy_for_slot()
         print("Proxy:", "on" if proxy else "off", flush=True)
-        context = await p.chromium.launch_persistent_context(
-            str(DIR / "profile"),
-            headless=True,
-            viewport={"width": 1280, "height": 1800},
-            proxy=proxy,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-blink-features=AutomationControlled",
-            ],
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-        )
-        page = context.pages[0] if context.pages else await context.new_page()
-        await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded")
+
+        context = None
+        page = None
+        for attempt in range(2):
+            active_proxy = proxy if attempt == 0 else None
+            if attempt == 1:
+                print("[WARN] Proxy failed in browser. Falling back to direct connection.", flush=True)
+            try:
+                context = await p.chromium.launch_persistent_context(
+                    str(DIR / "profile"),
+                    headless=True,
+                    viewport={"width": 1280, "height": 1800},
+                    proxy=active_proxy,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--ignore-certificate-errors",
+                        "--ignore-ssl-errors",
+                        "--allow-running-insecure-content",
+                        "--disable-blink-features=AutomationControlled",
+                    ],
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+                await page.goto("https://web.whatsapp.com", wait_until="domcontentloaded", timeout=45000)
+                break
+            except Exception as e:
+                print(f"[Attempt {attempt + 1}] Navigation failed with proxy ({type(e).__name__}): {e}", flush=True)
+                if context:
+                    try:
+                        await context.close()
+                    except Exception:
+                        pass
+                if attempt == 1:
+                    raise
         session_file = DIR / "monitor-session.json"
         session = json.loads(session_file.read_text()) if session_file.exists() else None
         import time
