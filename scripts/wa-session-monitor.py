@@ -142,7 +142,7 @@ async def check_one(page, phone):
     first_trigger_at = None
     for tick in range(120):  # up to ~36s (120 × 0.3s)
         # 1. Handle "Continue to Chat" / "Use WhatsApp Web" intermediate landing button
-        continue_btn = page.locator('text=/Continue to chat|Use WhatsApp Web/i').first
+        continue_btn = page.locator(':is(a, button):has-text("Continue to Chat"), :is(a, button):has-text("use WhatsApp Web")').first
         if await continue_btn.is_visible():
             print(f"[{phone}] Intermediate 'Continue to Chat' prompt found, clicking...", flush=True)
             await safe_click(continue_btn, page, "Continue to chat")
@@ -150,7 +150,7 @@ async def check_one(page, phone):
             continue
 
         # 2. Handle "Use here" prompt if another window stole session
-        use_here = page.locator('button:has-text("Use Here"), div[role="button"]:has-text("Use Here"), text=/Use here/i').first
+        use_here = page.locator(':is(button, div[role="button"]):has-text("Use here"), :is(button, div[role="button"]):has-text("Use Here")').first
         if await use_here.is_visible():
             print(f"[{phone}] 'Use here' prompt detected, taking session...", flush=True)
             await safe_click(use_here, page, "Use here")
@@ -164,7 +164,7 @@ async def check_one(page, phone):
             return False
 
         # 4. Check for invalid / not on WhatsApp message anywhere on page or modal (Number is NOT registered)
-        unreg_el = page.locator('text=/isn.t on WhatsApp|not on WhatsApp|invalid|Invite to WhatsApp/i').first
+        unreg_el = page.get_by_text(TRIGGER).first
         if await unreg_el.is_visible():
             try:
                 text = (await unreg_el.inner_text()).strip()
@@ -178,7 +178,7 @@ async def check_one(page, phone):
                     elapsed = asyncio.get_event_loop().time() - first_trigger_at
                     if elapsed >= 2.0:
                         print(f"[{phone}] Dialog confirmed for 2s! -> UNREGISTERED on WhatsApp! 🎉", flush=True)
-                        ok_btn = page.locator('button:has-text("OK"), div[role="button"]:has-text("OK")').first
+                        ok_btn = page.locator(':is(button, div[role="button"]):has-text("OK")').first
                         if await ok_btn.is_visible():
                             await safe_click(ok_btn, page, "OK button")
                         return True
