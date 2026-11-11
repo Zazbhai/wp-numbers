@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, readdir } from "fs/promises";
+import { readFile, writeFile, mkdir, readdir, unlink, rm } from "fs/promises";
 import { spawn } from "child_process";
 import { openSync } from "fs";
 import * as path from "path";
@@ -79,4 +79,37 @@ export async function knownSlots(): Promise<number[]> {
 
   return slots.length > 0 ? slots : [1];
 }
+
+export async function stopMonitor(slot: number): Promise<void> {
+  const pidFile = path.join(dir(slot), "monitor.pid");
+  try {
+    const pidStr = await readFile(pidFile, "utf8").catch(() => "0");
+    const pid = Number(pidStr.trim());
+    if (pid && !Number.isNaN(pid)) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        // already stopped
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export async function resetSlot(slot: number): Promise<void> {
+  await stopMonitor(slot);
+  const slotDir = dir(slot);
+  lastSpawnTimes.delete(slot);
+  try {
+    await unlink(path.join(slotDir, "link-request.json")).catch(() => {});
+    await unlink(path.join(slotDir, "monitor-session.json")).catch(() => {});
+    await unlink(path.join(slotDir, "monitor.pid")).catch(() => {});
+    await writeFile(path.join(slotDir, "link-status.json"), JSON.stringify({ state: "idle" }));
+    await rm(path.join(slotDir, "profile"), { recursive: true, force: true }).catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
 

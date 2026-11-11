@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { LockKeyhole, ShieldAlert } from "lucide-react";
+import { LockKeyhole, ShieldAlert, Trash2, CheckCircle2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import {
   checkAdminAccess,
@@ -123,6 +123,34 @@ function LinkPage() {
     if (!res.ok || !data?.ok) setMsg(data?.error ?? "Kuch gadbad hui, dobara try karein");
   }
 
+  async function onRemoveSlot(slotNum: number) {
+    if (!window.confirm(`Are you sure you want to remove and unlink WhatsApp Slot ${slotNum}?`)) {
+      return;
+    }
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/public/wa-link", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slot: slotNum }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.ok) {
+        setSlots((prev) =>
+          prev.map((s) => (s.slot === slotNum ? { slot: slotNum, state: "idle" } : s))
+        );
+        setMsg(`WhatsApp Slot ${slotNum} removed successfully.`);
+      } else {
+        setMsg(data?.error ?? "Failed to remove slot");
+      }
+    } catch {
+      setMsg("Network error while removing slot");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const input = "w-full rounded-lg border bg-card px-4 py-3 font-mono text-sm outline-none focus:ring-2 focus:ring-ring";
   const current = slots.find((s) => s.slot === slot);
 
@@ -214,34 +242,134 @@ function LinkPage() {
       <section className="mt-6 grid gap-2">
         {Array.from({ length: max }, (_, i) => i + 1).map((n) => {
           const s = slots.find((x) => x.slot === n);
+          const hasData = Boolean(s?.phone || (s?.state && s.state !== "idle"));
+          const isCurrent = slot === n;
           return (
-            <button
+            <div
               key={n}
-              type="button"
               onClick={() => setSlot(n)}
-              className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left text-sm ${slot === n ? "ring-2 ring-ring" : ""}`}
+              className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition ${
+                isCurrent
+                  ? "border-primary bg-primary/5 ring-1 ring-primary"
+                  : "bg-card hover:bg-accent/40"
+              }`}
             >
-              <span className="font-medium">WhatsApp {n}{s?.phone ? ` · ${s.phone}` : ""}</span>
-              <span className={s?.state === "error" ? "text-destructive" : "text-muted-foreground"}>
-                {LABEL[s?.state ?? "idle"] ?? s?.state}
-              </span>
-            </button>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">WhatsApp {n}</span>
+                  {s?.phone && (
+                    <span className="font-mono text-xs font-medium text-primary">
+                      +{s.phone}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-xs ${
+                    s?.state === "connected"
+                      ? "text-emerald-500 font-medium"
+                      : s?.state === "error"
+                      ? "text-destructive font-medium"
+                      : s?.state === "starting"
+                      ? "text-amber-500 font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {LABEL[s?.state ?? "idle"] ?? s?.state}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {hasData && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveSlot(n);
+                    }}
+                    disabled={busy}
+                    title={`Remove / Unlink WhatsApp ${n}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive hover:bg-destructive/20 transition disabled:opacity-50"
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span>Remove</span>
+                  </button>
+                )}
+              </div>
+            </div>
           );
         })}
       </section>
 
       <form onSubmit={onSubmit} className="mt-6 rounded-xl border bg-card p-5">
-        <label className="text-sm font-medium">WhatsApp {slot} ka phone number</label>
-        <input name="phone" inputMode="numeric" placeholder="918949446687" className={`mt-2 ${input}`} />
-        <button
-          type="submit"
-          disabled={busy || current?.state === "starting"}
-          className="mt-3 rounded-lg bg-primary px-5 py-2.5 font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
-        >
-          {busy || current?.state === "starting" ? "Code aa raha hai..." : "Code lao"}
-        </button>
-        {msg && <p className="mt-3 text-sm text-destructive">{msg}</p>}
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium">
+            WhatsApp {slot} ka phone number
+          </label>
+          {current?.phone && (
+            <span className="font-mono text-xs text-muted-foreground">
+              Current: +{current.phone}
+            </span>
+          )}
+        </div>
+        <input
+          name="phone"
+          inputMode="numeric"
+          defaultValue={current?.phone ?? ""}
+          key={`${slot}-${current?.phone ?? "empty"}`}
+          placeholder="918949446687"
+          className={`mt-2 ${input}`}
+        />
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="submit"
+            disabled={busy || current?.state === "starting"}
+            className="rounded-lg bg-primary px-5 py-2.5 font-medium text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+          >
+            {busy || current?.state === "starting" ? "Code aa raha hai..." : "Code lao"}
+          </button>
+
+          {current && (current.phone || current.state !== "idle") && (
+            <button
+              type="button"
+              onClick={() => onRemoveSlot(slot)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 px-3.5 py-2 text-xs font-semibold text-destructive hover:bg-destructive/20 transition disabled:opacity-50"
+            >
+              <Trash2 className="size-3.5" />
+              <span>Remove WhatsApp {slot}</span>
+            </button>
+          )}
+        </div>
+        {msg && (
+          <p
+            className={`mt-3 text-sm ${
+              msg.includes("successfully") ? "text-emerald-500 font-medium" : "text-destructive"
+            }`}
+          >
+            {msg}
+          </p>
+        )}
       </form>
+
+      {current?.state === "connected" && (
+        <section className="mt-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
+          <div className="mx-auto flex size-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+            <CheckCircle2 className="size-6" />
+          </div>
+          <h2 className="mt-3 text-lg font-bold text-emerald-400">WhatsApp {slot} is Connected</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {current.phone ? `+${current.phone} is active and checking numbers.` : "Active and checking numbers."}
+          </p>
+          <button
+            type="button"
+            onClick={() => onRemoveSlot(slot)}
+            disabled={busy}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 bg-destructive/15 px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/25 transition disabled:opacity-50"
+          >
+            <Trash2 className="size-3.5" />
+            <span>Unlink & Remove Number</span>
+          </button>
+        </section>
+      )}
 
       {current?.state === "code" && current.code && (
         <section className="mt-6 rounded-xl border bg-card p-6 text-center">

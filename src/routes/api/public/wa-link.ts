@@ -6,6 +6,7 @@ import {
   dir,
   readJson,
   knownSlots,
+  resetSlot,
   MAX_SLOTS,
 } from "@/lib/wa-monitor.server";
 import { isRequestAdmin } from "@/lib/admin-auth.server";
@@ -32,6 +33,18 @@ export const Route = createFileRoute("/api/public/wa-link")({
         await writeFile(path.join(slotDir, "link-request.json"), JSON.stringify({ phone, at: Date.now() }));
         await writeFile(path.join(slotDir, "link-status.json"), JSON.stringify({ state: "starting", phone }));
         return Response.json({ ok: true });
+      },
+      DELETE: async ({ request }) => {
+        if (!isRequestAdmin(request)) {
+          return Response.json({ ok: false, error: "Unauthorized: Admin access required" }, { status: 401 });
+        }
+        const body = await request.json().catch(() => null);
+        const slot = Number(body?.slot ?? 1);
+        if (!Number.isInteger(slot) || slot < 1 || slot > MAX_SLOTS) {
+          return Response.json({ ok: false, error: "Slot galat hai" }, { status: 400 });
+        }
+        await resetSlot(slot);
+        return Response.json({ ok: true, slot });
       },
       GET: async ({ request }) => {
         if (!isRequestAdmin(request)) {
