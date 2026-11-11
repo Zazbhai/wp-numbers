@@ -61,8 +61,8 @@ export async function maintainCheckerPipeline(): Promise<{
           await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
             { phone: res.phone },
             {
-              $setOnInsert: { phone: res.phone, status: "pending", note: null, created_at: now },
-              $set: { provider_id: res.id, updated_at: now },
+              $setOnInsert: { phone: res.phone, created_at: now },
+              $set: { status: "pending", provider_id: res.id, note: "Pipeline auto-refill", updated_at: now },
             },
             { upsert: true }
           );

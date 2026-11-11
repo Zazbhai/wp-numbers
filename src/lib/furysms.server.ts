@@ -21,26 +21,39 @@ export async function getFurySmsBalance(): Promise<number | null> {
   }
 }
 
-export async function requestFurySmsNumber(
+export async function requestFurySmsNumberWithDetails(
   service = "boyaah",
   country = "22"
-): Promise<{ id: string; phone: string } | null> {
+): Promise<{ ok: true; id: string; phone: string } | { ok: false; error: string }> {
   const apiKey = getApiKey();
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.error("[FurySMS getNumber] FURYSMS_API_KEY is missing from environment!");
+    return { ok: false, error: "FURYSMS_API_KEY is not configured" };
+  }
   const url = `${BASE_URL}?api_key=${encodeURIComponent(apiKey)}&action=getNumber&service=${encodeURIComponent(service)}&country=${encodeURIComponent(country)}`;
   try {
     const res = await fetch(url);
     const text = (await res.text()).trim();
+    console.log(`[FurySMS getNumber] Response: ${text}`);
     const m = text.match(/^ACCESS_NUMBER:([^:]+):(\+?\d+)$/);
     if (!m?.[1] || !m?.[2]) {
-      return null;
+      return { ok: false, error: text || "Empty response from FurySMS" };
     }
     const phone = normalizePhone(m[2]);
-    if (!phone) return null;
-    return { id: m[1], phone };
+    if (!phone) return { ok: false, error: `Invalid phone format: ${m[2]}` };
+    return { ok: true, id: m[1], phone };
   } catch (e) {
-    return null;
+    console.error("[FurySMS getNumber error]:", e);
+    return { ok: false, error: String(e) };
   }
+}
+
+export async function requestFurySmsNumber(
+  service = "boyaah",
+  country = "22"
+): Promise<{ id: string; phone: string } | null> {
+  const res = await requestFurySmsNumberWithDetails(service, country);
+  return res.ok ? { id: res.id, phone: res.phone } : null;
 }
 
 export type RegetNumberResult =

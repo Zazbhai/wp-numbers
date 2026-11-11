@@ -210,7 +210,9 @@ function CheckerPage() {
     setFetching(false);
     if (res.ok && res.phones) {
       setMsg(
-        `FurySMS se ${res.phones.length} naye number queue mein add kiye gaye aur checking shuru ho gayi!`,
+        res.note
+          ? res.note
+          : `FurySMS se ${res.phones.length} naye number queue mein add kiye gaye aur checking shuru ho gayi!`,
       );
       load();
     } else {

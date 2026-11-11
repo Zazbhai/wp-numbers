@@ -766,18 +766,28 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       const db = await getDb();
       const count = Math.min(Math.max(data.count, 1), 25);
       const addedPhones: string[] = [];
+      let lastError = "";
 
       for (let i = 0; i < count; i++) {
-        const { requestFurySmsNumber } = await import("./furysms.server");
-        const res = await requestFurySmsNumber("boyaah", "22");
-        if (!res) break;
+        const { requestFurySmsNumberWithDetails } = await import("./furysms.server");
+        const res = await requestFurySmsNumberWithDetails("boyaah", "22");
+        if (!res.ok) {
+          lastError = res.error;
+          console.warn(`[fetchNumberFromApi] FurySMS getNumber stopped at ${i}/${count}: ${res.error}`);
+          break;
+        }
 
         const now = new Date();
         await db.collection("wa_check_numbers").updateOne(
           { phone: res.phone },
           {
-            $setOnInsert: { phone: res.phone, status: "pending", note: null, created_at: now },
-            $set: { provider_id: res.id, updated_at: now },
+            $setOnInsert: { phone: res.phone, created_at: now },
+            $set: {
+              status: "pending",
+              provider_id: res.id,
+              note: "Queued for WhatsApp registration check",
+              updated_at: now,
+            },
           },
           { upsert: true },
         );
@@ -790,7 +800,19 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       // Automatically make sure the checker monitor is running
       await ensureMonitor(1).catch(() => {});
 
-      return { ok: true as const, phones: addedPhones };
+      if (addedPhones.length === 0) {
+        return {
+          ok: false as const,
+          error: lastError ? `FurySMS reply: ${lastError}` : "FurySMS se koi number nahi mila",
+        };
+      }
+
+      const note =
+        addedPhones.length < count
+          ? `FurySMS se ${addedPhones.length} numbers mile (${count} maange the; FurySMS: ${lastError || "Out of stock"})`
+          : undefined;
+
+      return { ok: true as const, phones: addedPhones, note };
     } catch (error) {
       console.error("[fetchNumberFromApi error]:", error);
       return { ok: false as const, error: "API se number lene mein error aayi" };

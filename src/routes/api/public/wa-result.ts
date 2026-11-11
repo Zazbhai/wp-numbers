@@ -37,8 +37,8 @@ export async function refillPendingNumbers(db: Db, target = 6) {
       await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
         { phone: res.phone },
         {
-          $setOnInsert: { phone: res.phone, status: "pending", note: null, created_at: now },
-          $set: { provider_id: res.id, updated_at: now },
+          $setOnInsert: { phone: res.phone, created_at: now },
+          $set: { status: "pending", provider_id: res.id, note: "Refilled from FurySMS", updated_at: now },
         },
         { upsert: true }
       );
@@ -121,88 +121,53 @@ export const Route = createFileRoute("/api/public/wa-result")({
           const now = new Date();
 
           if (found) {
-            // --- TWO-PASS VERIFICATION ---
-            // First pass: status "pending" → "pending_verify" (needs a second independent check)
-            // Second pass: status "pending_verify" → "available" (confirmed unregistered)
-            const isFirstPass = row["status"] === "pending";
-            const isSecondPass = row["status"] === "pending_verify";
-
-            if (isFirstPass) {
-              // Mark as needing a second-pass re-check; NOT yet visible in marketplace
-              await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
-                { phone, status: "pending" },
-                {
-                  $set: {
-                    status: "pending_verify",
-                    verify_count: 1,
-                    first_found_at: now,
-                    note: "First pass: unregistered detected. Awaiting second-pass confirmation.",
-                    updated_at: now,
-                  },
-                }
-              );
-              return Response.json({ ok: true, status: "pending_verify" });
-            }
-
-            if (isSecondPass) {
-              // Second confirmation — now it's truly unregistered. Show in marketplace.
-              await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
-                { phone, status: "pending_verify" },
-                {
-                  $set: {
-                    status: "available",
-                    verify_count: 2,
-                    note: "Double-verified unregistered (Available in Marketplace)",
-                    updated_at: now,
-                  },
-                }
-              );
-
-              // Telegram notification only after double-confirmation
-              try {
-                const chat = await db
-                  .collection<BotChatDoc>("bot_chats")
-                  .find({}, { projection: { chat_id: 1 } })
-                  .sort({ updated_at: -1 })
-                  .limit(1)
-                  .next();
-
-                if (chat && chat["chat_id"]) {
-                  await sendTelegramMessage(
-                    chat["chat_id"],
-                    `✅ Double-verified unregistered number!\nPhone: ${phone}\nStatus: Marketplace mein available hai.`
-                  );
-                }
-              } catch (tErr) {
-                console.error("[Telegram alert error]:", tErr);
+            // Confirmed unregistered! Immediately mark as available for Marketplace
+            await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
+              { phone },
+              {
+                $set: {
+                  status: "available",
+                  verify_count: 1,
+                  note: "Verified unregistered (Available in Marketplace)",
+                  updated_at: now,
+                },
               }
+            );
 
-              return Response.json({ ok: true, status: "available" });
+            // Send Telegram alert
+            try {
+              const chat = await db
+                .collection<BotChatDoc>("bot_chats")
+                .find({}, { projection: { chat_id: 1 } })
+                .sort({ updated_at: -1 })
+                .limit(1)
+                .next();
+
+              if (chat && chat["chat_id"]) {
+                await sendTelegramMessage(
+                  chat["chat_id"],
+                  `✅ Verified unregistered WhatsApp number!\nPhone: ${phone}\nStatus: Marketplace mein available hai.`
+                );
+              }
+            } catch (tErr) {
+              console.error("[Telegram alert error]:", tErr);
             }
 
-            // For any other status (e.g. available, completed), just acknowledge
-            return Response.json({ ok: true, status: row["status"] });
+            return Response.json({ ok: true, status: "available" });
           } else {
-            // Number IS on WhatsApp. Cancel FurySMS activation to refund credit if first-pass.
-            if (row["status"] === "pending" && row["provider_id"]) {
+            // Number IS on WhatsApp. Cancel FurySMS activation to refund credit.
+            if (row["provider_id"]) {
               cancelFurySmsNumber(row["provider_id"]).catch((e) =>
                 console.error("[FurySMS refund cancel error]:", e)
               );
             }
-
-            const wasFirstPass = row["status"] === "pending";
-            const wasSecondPass = row["status"] === "pending_verify";
 
             await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
               { phone },
               {
                 $set: {
                   status: "skipped",
-                  note: wasSecondPass
-                    ? "Second-pass confirmed REGISTERED on WhatsApp (false positive corrected)"
-                    : wasFirstPass
-                      ? "WhatsApp par registered mila (Order cancelled & refunded)"
-                      : "WhatsApp par registered mila",
+                  note: "WhatsApp par registered mila (Order cancelled & refunded)",
                   updated_at: now,
                 },
               }
