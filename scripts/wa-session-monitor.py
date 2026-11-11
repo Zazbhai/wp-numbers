@@ -18,8 +18,10 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent if "__file__" in globals() else Path.cwd()
+
 def load_env():
-    env_file = Path(__file__).resolve().parent.parent / ".env"
+    env_file = PROJECT_ROOT / ".env"
     if not env_file.exists():
         return
     for line in env_file.read_text(encoding="utf-8").splitlines():
@@ -36,7 +38,7 @@ load_env()
 
 SLOT = int(os.environ.get("WA_SLOT", "1"))
 # Project folder survives preview restarts, unlike /tmp, so linked sessions stay logged in.
-DIR = Path(os.environ.get("WA_DATA", Path(__file__).resolve().parent.parent / ".wa-data")) / f"slot-{SLOT}"
+DIR = Path(os.environ.get("WA_DATA", PROJECT_ROOT / ".wa-data")) / f"slot-{SLOT}"
 ORIGIN = os.environ.get("WA_APP_ORIGIN", "http://localhost:8080").rstrip("/")
 
 def report(session_id, state):
@@ -224,15 +226,71 @@ async def check_loop(context, is_connected):
             print("Queue fetch failed:", type(exc).__name__, flush=True)
         await asyncio.sleep(2)
 
+def parse_proxy(raw_line):
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        return None
+
+    scheme = "http"
+    if line.startswith("http://"):
+        line = line[7:]
+    elif line.startswith("https://"):
+        line = line[8:]
+    elif line.startswith("socks5://"):
+        scheme = "socks5"
+        line = line[9:]
+
+    parts = line.split(":")
+    # Format: IP:PORT:USER:PASS
+    if len(parts) == 4:
+        ip, port, user, password = parts
+        return {
+            "server": f"{scheme}://{ip}:{port}",
+            "username": user,
+            "password": password,
+        }
+
+    # Format: USER:PASS@IP:PORT
+    if "@" in line:
+        auth_part, host_part = line.split("@", 1)
+        user, password = auth_part.split(":", 1) if ":" in auth_part else (auth_part, "")
+        ip, port = host_part.split(":", 1) if ":" in host_part else (host_part, "80")
+        return {
+            "server": f"{scheme}://{ip}:{port}",
+            "username": user,
+            "password": password,
+        }
+
+    # Format: IP:PORT
+    if len(parts) == 2:
+        ip, port = parts
+        return {
+            "server": f"{scheme}://{ip}:{port}",
+            "username": None,
+            "password": None,
+        }
+
+    from urllib.parse import urlparse
+    u = urlparse("http://" + line if "://" not in line else line)
+    return {
+        "server": f"{scheme}://{u.hostname}:{u.port}",
+        "username": u.username,
+        "password": u.password,
+    }
+
 def test_proxy(proxy_cfg):
     import urllib.request
     try:
         url = f"{proxy_cfg['server']}"
-        proxy_url = f"http://{proxy_cfg['username']}:{proxy_cfg['password']}@{url.replace('http://', '').replace('https://', '')}"
+        clean_host = url.replace("http://", "").replace("https://", "").replace("socks5://", "")
+        if proxy_cfg.get("username") and proxy_cfg.get("password"):
+            proxy_url = f"http://{proxy_cfg['username']}:{proxy_cfg['password']}@{clean_host}"
+        else:
+            proxy_url = f"http://{clean_host}"
         handler = urllib.request.ProxyHandler({'http': proxy_url, 'https': proxy_url})
         opener = urllib.request.build_opener(handler)
         req = urllib.request.Request('https://api.ipify.org', headers={'User-Agent': 'Mozilla/5.0'})
-        with opener.open(req, timeout=4) as resp:
+        with opener.open(req, timeout=5) as resp:
             return resp.status == 200
     except Exception as e:
         print(f"Proxy test failed for {proxy_cfg['server']}: {e}", flush=True)
@@ -240,11 +298,10 @@ def test_proxy(proxy_cfg):
 
 def proxy_for_slot():
     """Each slot gets its own sticky residential proxy so WhatsApp doesn't block the server IP."""
-    from urllib.parse import urlparse
     env_val = os.environ.get("WA_PROXIES", "proxies.txt")
     candidates = [
         Path(env_val),
-        Path(__file__).resolve().parent.parent / env_val,
+        PROJECT_ROOT / env_val,
         Path("proxies.txt"),
         Path("/dev-server/.wa-proxies.txt"),
     ]
@@ -255,25 +312,29 @@ def proxy_for_slot():
             break
     if not path:
         return None
-    lines = [l.strip() for l in path.read_text().splitlines() if l.strip()]
+    lines = [l.strip() for l in path.read_text().splitlines() if l.strip() and not l.strip().startswith("#")]
     if not lines:
         return None
 
     idx = int((DIR / "proxy-index").read_text()) if (DIR / "proxy-index").exists() else SLOT - 1
-    
+
     # Try current and subsequent proxies
     for offset in range(len(lines)):
         cand_idx = (idx + offset) % len(lines)
         raw_url = lines[cand_idx]
-        u = urlparse(raw_url)
-        cfg = {"server": f"{u.scheme}://{u.hostname}:{u.port}", "username": u.username, "password": u.password}
-        print(f"Testing proxy {cand_idx + 1}/{len(lines)}: {cfg['server']}...", flush=True)
-        if test_proxy(cfg):
-            print(f"[OK] Using working proxy: {cfg['server']}", flush=True)
-            (DIR / "proxy-index").write_text(str(cand_idx))
-            return cfg
+        try:
+            cfg = parse_proxy(raw_url)
+            if not cfg:
+                continue
+            print(f"Testing proxy {cand_idx + 1}/{len(lines)}: {cfg['server']}...", flush=True)
+            if test_proxy(cfg):
+                print(f"[OK] Using working proxy: {cfg['server']}", flush=True)
+                (DIR / "proxy-index").write_text(str(cand_idx))
+                return cfg
+        except Exception as pe:
+            print(f"Proxy line {cand_idx + 1} parse error: {pe}", flush=True)
 
-    print("[WARN] All proxies in proxies.txt failed health check (e.g. 402 Payment Required).", flush=True)
+    print("[WARN] All proxies in proxies.txt failed health check.", flush=True)
     print("Falling back to direct connection so WhatsApp checking can proceed.", flush=True)
     return None
 
