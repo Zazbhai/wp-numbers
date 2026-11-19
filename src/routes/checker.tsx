@@ -120,13 +120,22 @@ function CheckerPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<string>("all");
   const [copied, setCopied] = useState(false);
-  const [monitor, setMonitor] = useState<{ running: boolean; state: string; phone: string | null }>(
-    {
-      running: false,
-      state: "idle",
-      phone: null,
-    },
-  );
+  const [monitor, setMonitor] = useState<{
+    running: boolean;
+    pid: number | null;
+    state: string;
+    isLinked: boolean;
+    phone: string | null;
+    logs: string;
+  }>({
+    running: false,
+    pid: null,
+    state: "idle",
+    isLinked: false,
+    phone: null,
+    logs: "",
+  });
+  const [showLogs, setShowLogs] = useState(false);
   const [startingEngine, setStartingEngine] = useState(false);
 
   // SMS Provider parameters state
@@ -515,16 +524,29 @@ function CheckerPage() {
           <div>
             <div className="flex items-center gap-2">
               <span
-                className={`size-3 rounded-full ${monitor.running ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`}
+                className={`size-3 rounded-full ${
+                  monitor.running && monitor.isLinked
+                    ? "bg-emerald-500 animate-pulse"
+                    : monitor.running
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-rose-500"
+                }`}
               />
-              <h2 className="font-bold text-base">
-                WhatsApp Checking Engine: {monitor.running ? "ACTIVE & RUNNING" : "STOPPED / IDLE"}
+              <h2 className="font-bold text-base flex items-center gap-2">
+                WhatsApp Checking Engine:{" "}
+                {monitor.running && monitor.isLinked
+                  ? "ACTIVE & WHATSAPP CONNECTED"
+                  : monitor.running
+                    ? "BROWSER ACTIVE — WA NOT LINKED"
+                    : "STOPPED / IDLE"}
               </h2>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {monitor.running
-                ? `Monitor background mein active hai. State: ${monitor.state}. Auto-refill target: 50 unregistered numbers. Har 1 ghante mein auto-check & restart process shuru hota hai.`
-                : "Checking ruki hui hai. Start karne ke liye niche button dabayein ya /link par WhatsApp connect karein."}
+              {monitor.running && monitor.isLinked
+                ? `Monitor background mein active hai (PID ${monitor.pid || "running"}). WhatsApp account linked hai aur queue check karne ke liye tayyar hai.`
+                : monitor.running
+                  ? `Chromium browser background mein chal raha hai par WhatsApp account linked nahi hai (State: ${monitor.state}). Numbers check karne ke liye pehle WhatsApp link karein.`
+                  : "Checking engine ruka hua hai. Start karne ke liye niche button dabayein ya /link par WhatsApp connect karein."}
             </p>
           </div>
 
@@ -553,8 +575,63 @@ function CheckerPage() {
             >
               Link WhatsApp (/link)
             </Link>
+            <button
+              type="button"
+              onClick={() => setShowLogs((prev) => !prev)}
+              className="rounded-lg border bg-muted px-3 py-2 text-xs font-medium hover:bg-accent transition"
+            >
+              {showLogs ? "Hide Console Logs" : "Show Console Logs"}
+            </button>
           </div>
         </div>
+
+        {/* WhatsApp Not Linked Warning Callout */}
+        {monitor.running && !monitor.isLinked && (
+          <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-bold text-amber-900 text-sm">
+                  WhatsApp Web Linked Nahi Hai — Number Checking Shuru Nahi Ho Sakti!
+                </h3>
+                <p className="mt-1 text-xs text-amber-800 leading-relaxed">
+                  WhatsApp par numbers check karne ke liye checker browser mein aapka WhatsApp Web account logged in hona zaroori hai. Abhi browser login screen / QR code par ruka hua hai.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    to="/link"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 text-xs font-bold transition shadow-sm"
+                  >
+                    <span>WhatsApp Link Karein (/link) →</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Live Logs Viewer Box */}
+        {showLogs && (
+          <div className="mt-4 border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono font-semibold text-muted-foreground flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500" />
+                Live Monitor Console Logs (.wa-data/slot-1/monitor.log)
+              </span>
+              <button
+                type="button"
+                onClick={load}
+                className="text-[11px] text-muted-foreground hover:text-foreground underline flex items-center gap-1"
+              >
+                <RefreshCw className="size-3" />
+                Refresh logs
+              </button>
+            </div>
+            <pre className="max-h-64 overflow-y-auto rounded-lg bg-black/90 p-3 font-mono text-[11px] text-emerald-400 whitespace-pre-wrap border border-emerald-950">
+              {monitor.logs || "No logs available. Start checking engine to see output."}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Marketplace Banner */}

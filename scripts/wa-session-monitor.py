@@ -46,14 +46,21 @@ def report(session_id, state):
     if not key:
         return False
     secret = base64.urlsafe_b64encode(hashlib.sha256(f"wa-checker:{key}".encode()).digest()).decode().rstrip("=")
-    request = Request(f"{ORIGIN}/api/public/wa-session", data=json.dumps({"sessionId": session_id, "state": state}).encode(),
-                      headers={"Content-Type": "application/json", "X-Checker-Key": secret})
-    try:
-        with urlopen(request, timeout=30) as response:
-            return json.load(response).get("ok") is True
-    except Exception as e:
-        print(f"report error: {e}", flush=True)
-        return False
+    origins = [ORIGIN]
+    if "localhost" in ORIGIN:
+        origins.append(ORIGIN.replace("localhost", "127.0.0.1"))
+    elif "127.0.0.1" in ORIGIN:
+        origins.append(ORIGIN.replace("127.0.0.1", "localhost"))
+
+    for target_origin in origins:
+        try:
+            request = Request(f"{target_origin}/api/public/wa-session", data=json.dumps({"sessionId": session_id, "state": state}).encode(),
+                              headers={"Content-Type": "application/json", "X-Checker-Key": secret})
+            with urlopen(request, timeout=15) as response:
+                return json.load(response).get("ok") is True
+        except Exception:
+            continue
+    return False
 
 def status(data):
     path = DIR / "link-status.json"
@@ -88,11 +95,26 @@ def checker_secret():
     return base64.urlsafe_b64encode(hashlib.sha256(f"wa-checker:{key}".encode()).digest()).decode().rstrip("=")
 
 def api(method, body=None):
-    request = Request(f"{ORIGIN}/api/public/wa-result?slot={SLOT}", method=method,
-                      data=json.dumps(body).encode() if body is not None else None,
-                      headers={"Content-Type": "application/json", "X-Checker-Key": checker_secret()})
-    with urlopen(request, timeout=120) as response:
-        return json.load(response)
+    origins = [ORIGIN]
+    if "localhost" in ORIGIN:
+        origins.append(ORIGIN.replace("localhost", "127.0.0.1"))
+    elif "127.0.0.1" in ORIGIN:
+        origins.append(ORIGIN.replace("127.0.0.1", "localhost"))
+
+    last_exc = None
+    for target_origin in origins:
+        try:
+            request = Request(f"{target_origin}/api/public/wa-result?slot={SLOT}", method=method,
+                              data=json.dumps(body).encode() if body is not None else None,
+                              headers={"Content-Type": "application/json", "X-Checker-Key": checker_secret()})
+            with urlopen(request, timeout=30) as response:
+                return json.load(response)
+        except Exception as e:
+            last_exc = e
+            continue
+    if last_exc:
+        raise last_exc
+    return {"ok": False}
 
 async def safe_click(locator, page=None, name="element"):
     """Robust click that bypasses viewport boundaries and custom scroll containers."""

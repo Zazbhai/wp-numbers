@@ -830,14 +830,35 @@ export const getMonitorStatus = createServerFn({ method: "GET" })
       const running = await isRunning(1);
       const { dir, readJson } = await import("./wa-monitor.server");
       const path = await import("path");
-      const json = await readJson(path.join(dir(1), "link-status.json"));
+      const { readFile } = await import("fs/promises");
+
+      const slotDir = dir(1);
+      const json = await readJson(path.join(slotDir, "link-status.json"));
+      const sessionJson = await readJson(path.join(slotDir, "monitor-session.json"));
+      const pidStr = await readFile(path.join(slotDir, "monitor.pid"), "utf8").catch(() => "0");
+
+      let logs = "";
+      try {
+        const logContent = await readFile(path.join(slotDir, "monitor.log"), "utf8");
+        const lines = logContent.trim().split("\n");
+        logs = lines.slice(-30).join("\n");
+      } catch {
+        logs = "No log output available yet.";
+      }
+
+      const isLinked = sessionJson?.state === "connected" && json?.state !== "error";
+      const state = isLinked ? "connected" : json?.state || (running ? "running" : "idle");
+
       return {
         running,
-        state: json?.state || (running ? "running" : "idle"),
+        pid: Number(pidStr.trim()) || null,
+        state,
+        isLinked,
         phone: json?.phone || null,
+        logs,
       };
     } catch {
-      return { running: false, state: "idle", phone: null };
+      return { running: false, pid: null, state: "idle", isLinked: false, phone: null, logs: "" };
     }
   });
 
