@@ -17,6 +17,7 @@ import {
   ChevronUp,
   Server,
   Zap,
+  Play,
 } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
@@ -527,16 +528,25 @@ function CheckerPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {!monitor.running && (
-              <button
-                onClick={handleStartEngine}
-                disabled={startingEngine}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition disabled:opacity-60"
-              >
-                {startingEngine ? "Starting..." : "Start Checking Now"}
-              </button>
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleStartEngine}
+              disabled={startingEngine}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition disabled:opacity-60 shadow-sm"
+              title="Manually trigger WhatsApp checker engine and run queued checks"
+            >
+              {startingEngine ? (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  <span>Starting Engine...</span>
+                </>
+              ) : (
+                <>
+                  <Play className="size-3.5 fill-current" />
+                  <span>{monitor.running ? "Manual Check / Restart Engine" : "Start Checking Now"}</span>
+                </>
+              )}
+            </button>
             <Link
               to="/link"
               className="rounded-lg border px-3 py-2 text-xs font-medium hover:bg-accent transition"
@@ -856,7 +866,7 @@ function CheckerPage() {
           placeholder={"9876543210\n+91 80008 58534\n12025550123"}
           className={`mt-3 ${input}`}
         />
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="submit"
             disabled={busy}
@@ -889,6 +899,26 @@ function CheckerPage() {
               </>
             ) : (
               <span>Fresh numbers pull karein ({providerServiceId || "boyaah"})</span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleStartEngine}
+            disabled={startingEngine}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-sm font-bold transition disabled:opacity-60 flex items-center gap-2 shadow-sm sm:ml-auto"
+            title="Manually trigger WhatsApp checker to verify pending numbers"
+          >
+            {startingEngine ? (
+              <>
+                <RefreshCw className="size-4 animate-spin" />
+                <span>Checking Engine Starting...</span>
+              </>
+            ) : (
+              <>
+                <Play className="size-4 fill-white" />
+                <span>Start Checking Now ({counts.pending} In Queue)</span>
+              </>
             )}
           </button>
         </div>

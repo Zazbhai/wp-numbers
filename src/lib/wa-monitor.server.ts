@@ -35,7 +35,12 @@ export async function isRunning(slot: number): Promise<boolean> {
 const lastSpawnTimes = new Map<number, number>();
 
 export async function ensureMonitor(slot: number, force = false): Promise<boolean> {
-  if (await isRunning(slot)) return true;
+  const running = await isRunning(slot);
+  if (running) {
+    if (!force) return true;
+    await stopMonitor(slot);
+    await new Promise((r) => setTimeout(r, 600));
+  }
 
   const now = Date.now();
   const lastSpawn = lastSpawnTimes.get(slot) || 0;

@@ -846,10 +846,12 @@ export const startChecker = createServerFn({ method: "POST" })
   .handler(async () => {
     try {
       const ok = await ensureMonitor(1, true);
-      return { ok };
+      const { maintainCheckerPipeline } = await import("./checker-engine.server");
+      await maintainCheckerPipeline().catch(() => {});
+      return { ok, message: ok ? "Checking started! Monitor is running." : "Failed to start checker." };
     } catch (error) {
       console.error("[startChecker error]:", error);
-      return { ok: false };
+      return { ok: false, message: String(error) };
     }
   });
 
