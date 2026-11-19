@@ -889,6 +889,12 @@ export const getMonitorStatus = createServerFn({ method: "GET" })
       const isLinked = sessionJson?.state === "connected" && json?.state !== "error";
       const state = isLinked ? "connected" : json?.state || (running ? "running" : "idle");
 
+      let engine = null;
+      try {
+        const { getEngineStats } = await import("./checker-engine.server");
+        engine = getEngineStats();
+      } catch {}
+
       return {
         running,
         pid: Number(pidStr.trim()) || null,
@@ -896,9 +902,10 @@ export const getMonitorStatus = createServerFn({ method: "GET" })
         isLinked,
         phone: json?.phone || null,
         logs,
+        engine,
       };
     } catch {
-      return { running: false, pid: null, state: "idle", isLinked: false, phone: null, logs: "" };
+      return { running: false, pid: null, state: "idle", isLinked: false, phone: null, logs: "", engine: null };
     }
   });
 

@@ -148,6 +148,14 @@ function CheckerPage() {
     isLinked: boolean;
     phone: string | null;
     logs: string;
+    engine?: {
+      target: number;
+      hourlyPullCount: number;
+      hourlyIntervalMinutes: number;
+      lastHourlyRun: string | null;
+      nextHourlyRun: string | null;
+      isEngineRunning: boolean;
+    } | null;
   }>({
     running: false,
     pid: null,
@@ -155,6 +163,7 @@ function CheckerPage() {
     isLinked: false,
     phone: null,
     logs: "",
+    engine: null,
   });
   const [showLogs, setShowLogs] = useState(false);
   const [startingEngine, setStartingEngine] = useState(false);
@@ -633,6 +642,38 @@ function CheckerPage() {
             >
               {showLogs ? "Hide Console Logs" : "Show Console Logs"}
             </button>
+          </div>
+        </div>
+
+        {/* Automated FurySMS Refill & Hourly Pull Status */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 border-t pt-4 text-xs">
+          <div className="rounded-lg bg-muted/40 border p-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold flex items-center gap-1.5">
+                <span className={`size-2 rounded-full ${counts.available < 100 ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`} />
+                Auto-Refill Threshold: Target 100 Unregistered
+              </span>
+              <span className="font-mono text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded">
+                {counts.available}/100 Ready
+              </span>
+            </div>
+            <p className="mt-1 text-muted-foreground leading-relaxed text-[11px]">
+              Jab available unregistered numbers 100 se kam honge ({counts.available}/100 currently), engine automatically FurySMS se numbers pull karke queue mein add karta rahega.
+            </p>
+          </div>
+          <div className="rounded-lg bg-muted/40 border p-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-blue-500 animate-pulse" />
+                Hourly Constant Auto-Fetch: 20 Numbers/Hour
+              </span>
+              <span className="font-mono text-[11px] font-semibold text-blue-700 bg-blue-500/10 px-2 py-0.5 rounded">
+                Active (20/hr)
+              </span>
+            </div>
+            <p className="mt-1 text-muted-foreground leading-relaxed text-[11px]">
+              Har ghante engine automatically FurySMS ke getNumber endpoint ko call karke 20 fresh numbers queue mein add karta hai.
+            </p>
           </div>
         </div>
 
