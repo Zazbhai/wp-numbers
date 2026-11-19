@@ -132,6 +132,12 @@ export const Route = createFileRoute("/api/public/wa-result")({
                   note: "Verified unregistered (Available in Marketplace)",
                   updated_at: now,
                 },
+                $unset: {
+                  owner_user_id: "",
+                  active_order_id: "",
+                  wallet_purchase_id: "",
+                  otp: "",
+                },
               }
             );
 

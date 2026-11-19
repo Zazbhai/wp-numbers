@@ -34,7 +34,6 @@ async function claimRandomAvailableNumber(
           $match: {
             status: { $in: ["available", "sent", "found"] },
             provider_id: { $exists: true, $nin: [null, ""] },
-            owner_user_id: { $in: [null] },
           },
         },
         { $sample: { size: 1 } },
@@ -46,9 +45,14 @@ async function claimRandomAvailableNumber(
       {
         phone: candidate.phone,
         status: { $in: ["available", "sent", "found"] },
-        owner_user_id: { $in: [null] },
       },
-      { $set: { status: "pending_otp", updated_at: new Date() } },
+      {
+        $set: {
+          status: "pending_otp",
+          owner_user_id: null,
+          updated_at: new Date(),
+        },
+      },
       { returnDocument: "after" },
     );
     if (claimed) return claimed;

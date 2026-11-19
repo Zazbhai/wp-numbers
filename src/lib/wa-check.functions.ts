@@ -207,7 +207,6 @@ export const buyMarketplaceNumber = createServerFn({ method: "POST" })
             $match: {
               status: { $in: ["available", "sent", "found"] },
               provider_id: { $exists: true, $nin: [null, ""] },
-              owner_user_id: { $in: [null] },
             },
           },
           { $sample: { size: 1 } },
@@ -227,7 +226,6 @@ export const buyMarketplaceNumber = createServerFn({ method: "POST" })
         {
           phone,
           status: { $in: ["available", "sent", "found"] },
-          owner_user_id: { $in: [null] },
         },
         {
           $set: {
@@ -405,7 +403,6 @@ export const rebuyRecentNumber = createServerFn({ method: "POST" })
         phone,
         status: { $in: ["available", "sent", "found"] },
         provider_id: { $exists: true, $nin: [null, ""] },
-        owner_user_id: { $in: [null] },
       });
       if (!candidate) {
         return { ok: false as const, error: "This number is not currently available to rebuy." };
@@ -421,7 +418,6 @@ export const rebuyRecentNumber = createServerFn({ method: "POST" })
         {
           phone,
           status: { $in: ["available", "sent", "found"] },
-          owner_user_id: { $in: [null] },
         },
         {
           $set: {
@@ -946,7 +942,10 @@ export const recheckNumber = createServerFn({ method: "POST" })
         .collection("wa_check_numbers")
         .updateOne(
           { phone: data.phone },
-          { $set: { status: "pending", note: null, updated_at: new Date() } },
+          {
+            $set: { status: "pending", note: null, updated_at: new Date() },
+            $unset: { owner_user_id: "", active_order_id: "", wallet_purchase_id: "", otp: "" },
+          },
         );
       return { ok: true as const };
     } catch (error) {
@@ -969,6 +968,12 @@ export const recheckAllUnregistered = createServerFn({ method: "POST" })
             status: "pending",
             note: "Queued for re-verification",
             updated_at: now,
+          },
+          $unset: {
+            owner_user_id: "",
+            active_order_id: "",
+            wallet_purchase_id: "",
+            otp: "",
           },
         }
       );
