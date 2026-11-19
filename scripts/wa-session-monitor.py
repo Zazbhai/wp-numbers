@@ -605,30 +605,6 @@ async def main():
                         except Exception:
                             title = "WhatsApp"
                         print(f"[{SLOT}] ⏳ Waiting for WhatsApp Web to sync chats... (page title: '{title}')", flush=True)
-                    if session and session.get("state") == "connected":
-                        logout_checks += 1
-                        if logout_checks >= 3:
-                            session["state"] = "logged_out"
-                            session_file.write_text(json.dumps(session))
-                            status({"state": "error", "error": "WhatsApp logout ho gaya; dobara link karein."})
-                            print(f"[{SLOT}] ⚠️ WhatsApp Web has logged out. Please relink at /link", flush=True)
-                            await asyncio.to_thread(report, session["id"], "logged_out")
-                            last_state_log = "logged_out"
-                    else:
-                        if last_state_log != "login_screen":
-                            print(f"[{SLOT}] 📱 WhatsApp Web is NOT LINKED yet.", flush=True)
-                            print(f"[{SLOT}] 👉 Open http://<vps-ip>:8080/link to scan QR or enter phone number.", flush=True)
-                            last_state_log = "login_screen"
-                        if current_state() == "qr" or canvas_visible:
-                            await capture_qr(page, None)
-
-                else:
-                    if sync_tick % 5 == 1:
-                        try:
-                            title = await page.title()
-                        except Exception:
-                            title = "WhatsApp"
-                        print(f"[{SLOT}] ⏳ Waiting for WhatsApp Web to sync chats... (page title: '{title}')", flush=True)
 
                 req = DIR / "link-request.json"
                 if req.exists():
