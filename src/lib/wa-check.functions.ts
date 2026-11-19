@@ -955,6 +955,33 @@ export const recheckNumber = createServerFn({ method: "POST" })
     }
   });
 
+export const recheckAllUnregistered = createServerFn({ method: "POST" })
+  .middleware([requireAdminAuth])
+  .handler(async () => {
+    try {
+      const { getDb } = await import("@/integrations/mongodb/client.server");
+      const db = await getDb();
+      const now = new Date();
+      const res = await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateMany(
+        { status: { $in: MARKETPLACE_READY_STATUSES } },
+        {
+          $set: {
+            status: "pending",
+            note: "Queued for re-verification",
+            updated_at: now,
+          },
+        }
+      );
+
+      await ensureMonitor(1).catch(() => {});
+
+      return { ok: true as const, modifiedCount: res.modifiedCount };
+    } catch (error) {
+      console.error("[recheckAllUnregistered error]:", error);
+      return { ok: false as const, error: "Numbers ko recheck queue mein move nahi kar paye." };
+    }
+  });
+
 export const getCheckerProviderSettings = createServerFn({ method: "GET" })
   .middleware([requireAdminAuth])
   .handler(async () => {

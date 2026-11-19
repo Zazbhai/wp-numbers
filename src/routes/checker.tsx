@@ -27,6 +27,7 @@ import {
   getCheckerKey,
   listNumbers,
   recheckNumber,
+  recheckAllUnregistered,
   getMonitorStatus,
   startChecker,
   getCheckerProviderSettings,
@@ -157,6 +158,7 @@ function CheckerPage() {
   });
   const [showLogs, setShowLogs] = useState(false);
   const [startingEngine, setStartingEngine] = useState(false);
+  const [recheckingAll, setRecheckingAll] = useState(false);
 
   // SMS Provider parameters state
   const [providerBaseUrl, setProviderBaseUrl] = useState("");
@@ -441,6 +443,31 @@ function CheckerPage() {
     await recheckNumber({ data: { phone } });
     load();
   }
+
+  async function handleRecheckAllUnregistered() {
+    if (
+      !confirm(
+        `Kya aap sabhi ${counts.available} unregistered numbers ko dobara check queue mein bhejna chahte hain?`
+      )
+    ) {
+      return;
+    }
+    setRecheckingAll(true);
+    setMsg("Unregistered numbers ko check queue mein bhej rahe hain...");
+    try {
+      const res = await recheckAllUnregistered();
+      if (res.ok) {
+        setMsg(`✅ ${res.modifiedCount} unregistered numbers ko dobara check queue mein bhej diya gaya hai!`);
+        load();
+      } else {
+        setMsg(res.error || "Failed to recheck all unregistered numbers.");
+      }
+    } catch {
+      setMsg("Recheck fail ho gaya. Dobara try karein.");
+    } finally {
+      setRecheckingAll(false);
+    }
+  }
   async function onDelete(phone: string) {
     if (!confirm(`${phone} hata dein?`)) return;
     await deleteNumber({ data: { phone } });
@@ -667,12 +694,24 @@ function CheckerPage() {
             code.
           </p>
         </div>
-        <Link
-          to="/numbers"
-          className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition shrink-0"
-        >
-          Open Marketplace ({counts.available} Ready) →
-        </Link>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleRecheckAllUnregistered}
+            disabled={recheckingAll || counts.available === 0}
+            className="rounded-lg border border-emerald-600/40 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-800 px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
+            title="Send all verified unregistered numbers back to WhatsApp checker queue"
+          >
+            <RefreshCw className={`size-3.5 ${recheckingAll ? "animate-spin" : ""}`} />
+            <span>{recheckingAll ? "Queue mein bhej rahe hain..." : `Recheck All Unregistered (${counts.available})`}</span>
+          </button>
+          <Link
+            to="/numbers"
+            className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90 transition shrink-0"
+          >
+            Open Marketplace ({counts.available} Ready) →
+          </Link>
+        </div>
       </div>
 
       {/* Counts Grid */}
@@ -1094,13 +1133,25 @@ function CheckerPage() {
               Latest {rows.length} of {counts.total} numbers
             </p>
           </div>
-          <button
-            onClick={exportCsv}
-            disabled={shown.length === 0}
-            className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:opacity-60"
-          >
-            CSV download ({shown.length})
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRecheckAllUnregistered}
+              disabled={recheckingAll || counts.available === 0}
+              className="rounded-lg border border-amber-600/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 px-3.5 py-2 text-xs font-semibold transition flex items-center gap-1.5 disabled:opacity-50"
+              title="Send all available unregistered numbers back to WhatsApp queue for re-verification"
+            >
+              <RefreshCw className={`size-3.5 ${recheckingAll ? "animate-spin" : ""}`} />
+              <span>Recheck Unregistered ({counts.available})</span>
+            </button>
+            <button
+              onClick={exportCsv}
+              disabled={shown.length === 0}
+              className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:bg-accent disabled:opacity-60"
+            >
+              CSV download ({shown.length})
+            </button>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
