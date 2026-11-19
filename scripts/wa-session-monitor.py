@@ -142,13 +142,13 @@ async def safe_click(locator, page=None, name="element"):
             pass
     return False
 
-TRIGGER = re.compile(
-    r"isn['’]?t on WhatsApp"
-    r"|not on WhatsApp"
+UNREGISTERED_PATTERN = re.compile(
+    r"(phone number.*(isn['’]?t on WhatsApp|is not on WhatsApp|invalid)"
+    r"|isn['’]?t on WhatsApp"
     r"|shared via url is invalid"
-    r"|WhatsApp पर नहीं"
-    r"|फ़ोन नंबर अमान्य"
-    r"|Invite to WhatsApp",
+    r"|फ़ोन नंबर.*(WhatsApp पर नहीं|अमान्य)"
+    r"|WhatsApp पर नहीं है"
+    r"|अमान्य फ़ोन नंबर)",
     re.I
 )
 CHECK_WORKERS = 1
@@ -159,25 +159,50 @@ is_checking = False
 async def check_one(page, phone):
     """Returns True (not on WhatsApp), False (on WhatsApp) or None (unclear, keep pending).
     
-    Uses in-process double-confirmation: if the trigger dialog fires, we wait 1.5 seconds
-    and re-verify before concluding unregistered. This eliminates false positives from
-    transient WhatsApp Web loading states.
+    Uses in-process double-confirmation: if the trigger dialog fires, we wait 1.8 seconds
+    and re-verify before concluding unregistered. Also performs pre-check cleanup to ensure
+    no stale modal from previous checks can bleed into the current number check.
     """
     clean_phone = phone.lstrip('+')
     url = f"https://web.whatsapp.com/send?phone={clean_phone}"
+
+    # 1. PRE-CHECK CLEANUP: dismiss any lingering modal or active chat from previous check
+    for _ in range(3):
+        try:
+            lingering_modal = page.locator('div[role="dialog"], div[data-animate-modal-popup="true"]').first
+            if await lingering_modal.is_visible():
+                btn = lingering_modal.locator(':is(button, div[role="button"])').first
+                if await btn.is_visible():
+                    await safe_click(btn, page, "Dismiss lingering modal")
+                await page.keyboard.press("Escape")
+                await asyncio.sleep(0.3)
+            else:
+                break
+        except Exception:
+            break
+
+    try:
+        await page.keyboard.press("Escape")
+    except Exception:
+        pass
+    await asyncio.sleep(0.2)
+
     print(f"[{phone}] Opening {url}...", flush=True)
     try:
         # Navigate without tearing down the whole Chromium renderer process
         try:
             await page.evaluate(f"window.location.href = '{url}'")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.8)
         except Exception:
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await asyncio.sleep(0.8)
     except Exception as e:
         print(f"[{phone}] Navigation failed: {e}", flush=True)
         return None
 
     first_trigger_at = None
+    chat_confirmed_at = None
+
     for tick in range(120):  # up to ~36s (120 × 0.3s)
         # 1. Handle "Continue to Chat" / "Use WhatsApp Web" intermediate landing button
         continue_btn = page.locator(':is(a, button):has-text("Continue to Chat"), :is(a, button):has-text("use WhatsApp Web")').first
@@ -195,44 +220,75 @@ async def check_one(page, phone):
             await asyncio.sleep(1)
             continue
 
-        # 3. Check for chat window (Number IS registered on WhatsApp)
-        chat_box = page.locator('#main, footer div[contenteditable="true"], div[data-testid="conversation-compose-box-input"]').first
-        if await chat_box.is_visible():
-            print(f"[{phone}] Chat box visible (#main) -> Number IS registered on WhatsApp", flush=True)
-            try:
-                await page.keyboard.press("Escape")
-            except Exception:
-                pass
-            return False
+        # 3. Check for "Starting chat" loading overlay/spinner
+        # If WhatsApp Web is still actively resolving the contact, wait and do NOT conclude yet!
+        starting_chat = page.locator(':is(div[role="dialog"], div):has-text("Starting chat"), :is(div[role="dialog"], div):has-text("चैट शुरू हो रही")').first
+        if await starting_chat.is_visible():
+            first_trigger_at = None
+            chat_confirmed_at = None
+            if tick > 0 and tick % 15 == 0:
+                print(f"[{phone}] 'Starting chat' progress visible, waiting for WhatsApp lookup...", flush=True)
+            await asyncio.sleep(0.3)
+            continue
 
         # 4. Check ONLY inside popup / dialog modals (Unregistered popup)
-        # NEVER search the full page or chat list to prevent false positives from chat messages!
+        # Excludes [data-testid="popup-contents"] to prevent matching chat menus / reaction tooltips!
+        modal = page.locator('div[role="dialog"], div[data-animate-modal-popup="true"]').first
+        modal_is_visible = await modal.is_visible()
         unreg_text = ""
-        modal = page.locator('div[role="dialog"], div[data-animate-modal-popup="true"], [data-testid="popup-contents"]').first
-        if await modal.is_visible():
+        if modal_is_visible:
             try:
                 modal_text = (await modal.inner_text()).strip()
             except Exception:
                 modal_text = ""
-            if modal_text and TRIGGER.search(modal_text):
+            if modal_text and UNREGISTERED_PATTERN.search(modal_text):
                 unreg_text = modal_text
 
-        if unreg_text and TRIGGER.search(unreg_text):
+        if unreg_text:
+            chat_confirmed_at = None
             if first_trigger_at is None:
                 print(f"[{phone}] Unregistered dialog detected: '{unreg_text[:80]}'. Confirming...", flush=True)
                 first_trigger_at = asyncio.get_event_loop().time()
             else:
                 elapsed = asyncio.get_event_loop().time() - first_trigger_at
-                if elapsed >= 1.5:
+                if elapsed >= 1.8:
                     print(f"[{phone}] Dialog confirmed for {elapsed:.1f}s! -> UNREGISTERED on WhatsApp! 🎉", flush=True)
-                    ok_btn = page.locator('div[role="dialog"] :is(button, div[role="button"]):has-text("OK"), div[role="dialog"] :is(button, div[role="button"]):has-text("Close")').first
-                    if await ok_btn.is_visible():
-                        await safe_click(ok_btn, page, "OK button")
+                    btn = modal.locator(':is(button, div[role="button"])').first
+                    if await btn.is_visible():
+                        await safe_click(btn, page, "Dismiss dialog button")
+                    try:
+                        await page.keyboard.press("Escape")
+                    except Exception:
+                        pass
+                    try:
+                        await modal.wait_for(state="detached", timeout=2000)
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.3)
                     return True
         elif first_trigger_at is not None:
             first_trigger_at = None
 
-        # 5. Periodic status snippet every 4.5 seconds for visibility
+        # 5. Check for chat window (Number IS registered on WhatsApp)
+        # Only evaluated when NO unregistered modal is visible!
+        if not modal_is_visible:
+            chat_box = page.locator('#main footer div[contenteditable="true"], #main div[data-testid="conversation-compose-box-input"], #main header').first
+            if await chat_box.is_visible():
+                if chat_confirmed_at is None:
+                    chat_confirmed_at = asyncio.get_event_loop().time()
+                else:
+                    chat_elapsed = asyncio.get_event_loop().time() - chat_confirmed_at
+                    if chat_elapsed >= 0.8:
+                        print(f"[{phone}] Chat box confirmed for {chat_elapsed:.1f}s (#main) -> Number IS registered on WhatsApp", flush=True)
+                        try:
+                            await page.keyboard.press("Escape")
+                        except Exception:
+                            pass
+                        return False
+        else:
+            chat_confirmed_at = None
+
+        # 6. Periodic status snippet every 4.5 seconds for visibility
         if tick > 0 and tick % 15 == 0:
             try:
                 body_snippet = " ".join((await page.locator("body").inner_text()).split())[:120]
