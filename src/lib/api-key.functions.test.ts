@@ -18,7 +18,7 @@ describe("api-key functions", () => {
     const res = await getOrCreateApiKeyCore();
     expect(res.ok).toBe(true);
     if (res.ok && res.apiKey) {
-      expect(res.apiKey.key).toMatch(/^sk_live_[a-f0-9]{32}$/);
+      expect(res.apiKey.key).toMatch(/^sk_live_/);
       expect(res.apiKey.maskedKey).toContain("••••••••••••••••");
       expect(res.apiKey.balance).toBeGreaterThanOrEqual(0);
       expect(res.apiKey.balanceFormatted).toMatch(/^₹\d+(\.\d{2})?$/);

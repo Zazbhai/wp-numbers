@@ -13,11 +13,14 @@ async function main() {
   await client.connect();
   const db = client.db("register_checker");
   
-  const nonPlus = await db.collection("wa_check_numbers").countDocuments({ phone: { $not: /^\+/ } });
-  console.log("Non-plus count:", nonPlus);
-  if (nonPlus > 0) {
-    const samples = await db.collection("wa_check_numbers").find({ phone: { $not: /^\+/ } }).limit(5).toArray();
-    console.log("Non-plus samples:", samples.map((s) => s.phone));
+  const doc = await db.collection("wa_check_numbers").findOne({ phone: "+918780123362" });
+  console.log("Number +918780123362 in DB:", doc);
+  if (doc && doc.status === "available") {
+    await db.collection("wa_check_numbers").updateOne(
+      { phone: "+918780123362" },
+      { $set: { status: "pending", note: "Reset to pending (false positive trigger fixed)", updated_at: new Date() } }
+    );
+    console.log("Reset +918780123362 to pending.");
   }
 
   const counts = await db.collection("wa_check_numbers").aggregate([

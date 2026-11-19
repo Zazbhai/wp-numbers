@@ -187,7 +187,7 @@ export async function topUpApiKeyBalanceCore(data: { key: string; amount: number
     const hashed = hashKey(data.key);
 
     const res = await db.collection<ApiKeyDoc>("api_keys").findOneAndUpdate(
-      { key: hashed },
+      { $or: [{ key: hashed }, { key: data.key }, { raw_key: data.key }] },
       { $inc: { balance: data.amount }, $set: { updated_at: new Date() } },
       { returnDocument: "after" }
     );
