@@ -625,6 +625,21 @@ async function handleRequest(req, res) {
           { order_id: orderId },
           { $set: { status: "cancelled", updated_at: new Date() } }
         );
+        // Put back in unregistered category if that number didn't get an OTP
+        if (!numDoc.otp && !order.otp) {
+          await db.collection("wa_check_numbers").updateOne(
+            { phone: order.phone, otp: { $in: [null, ""] } },
+            {
+              $set: {
+                status: "available",
+                note: "Order cancelled without OTP (Available in Marketplace)",
+                active_order_id: null,
+                owner_user_id: null,
+                updated_at: new Date(),
+              },
+            }
+          );
+        }
         return sendText(res, "STATUS_CANCEL");
       }
     }
@@ -665,10 +680,21 @@ async function handleRequest(req, res) {
         { $set: { status: "cancelled", updated_at: now } }
       );
 
-      await db.collection("wa_check_numbers").updateOne(
-        { phone: order.phone },
-        { $set: { status: "available", active_order_id: null, updated_at: now } }
-      );
+      // Put back in unregistered category if that number didn't get an OTP
+      if (!order.otp) {
+        await db.collection("wa_check_numbers").updateOne(
+          { phone: order.phone, otp: { $in: [null, ""] } },
+          {
+            $set: {
+              status: "available",
+              note: "Cancelled without OTP (Available in Marketplace)",
+              active_order_id: null,
+              owner_user_id: null,
+              updated_at: now,
+            },
+          }
+        );
+      }
 
       if (!keyDoc.unlimited) {
         await db.collection("api_keys").updateOne(

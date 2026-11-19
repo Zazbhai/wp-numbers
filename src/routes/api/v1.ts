@@ -550,6 +550,23 @@ async function handleApi(request: Request) {
                   { order_id: orderId },
                   { $set: { status: "cancelled", updated_at: new Date() } },
                 );
+              // Put back in unregistered category if that number didn't get an OTP
+              if (!numDoc.otp && !order.otp) {
+                await db
+                  .collection<WaCheckNumberDoc>("wa_check_numbers")
+                  .updateOne(
+                    { phone: order.phone, otp: { $in: [null, ""] } },
+                    {
+                      $set: {
+                        status: "available",
+                        note: "Order cancelled without OTP (Available in Marketplace)",
+                        active_order_id: null,
+                        owner_user_id: null,
+                        updated_at: new Date(),
+                      },
+                    },
+                  );
+              }
               return txt("STATUS_CANCEL");
             }
           }
@@ -588,13 +605,23 @@ async function handleApi(request: Request) {
             await db
               .collection<ApiOrderDoc>("api_orders")
               .updateOne({ order_id: orderId }, { $set: { status: "cancelled", updated_at: now } });
-            // Restore number to available
-            await db
-              .collection<WaCheckNumberDoc>("wa_check_numbers")
-              .updateOne(
-                { phone: order.phone },
-                { $set: { status: "available", active_order_id: null, updated_at: now } },
-              );
+            // Restore number to unregistered category (available) if no OTP was received
+            if (!order.otp) {
+              await db
+                .collection<WaCheckNumberDoc>("wa_check_numbers")
+                .updateOne(
+                  { phone: order.phone, otp: { $in: [null, ""] } },
+                  {
+                    $set: {
+                      status: "available",
+                      note: "Cancelled without OTP (Available in Marketplace)",
+                      active_order_id: null,
+                      owner_user_id: null,
+                      updated_at: now,
+                    },
+                  },
+                );
+            }
             // Refund if not unlimited
             if (!keyDoc.unlimited) {
               await db

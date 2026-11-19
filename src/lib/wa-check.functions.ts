@@ -534,12 +534,13 @@ export const checkSmsOtp = createServerFn({ method: "POST" })
       }
 
       if (res.status === "CANCELLED") {
-        // No OTP received -> KEEP the number in marketplace as "available"!
+        // No OTP received -> put number back in unregistered category (available)!
         await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
-          { phone },
+          { phone, otp: { $in: [null, ""] } },
           {
             $set: {
               status: "available",
+              note: "Provider cancelled without OTP (Available in Marketplace)",
               active_order_id: null,
               owner_user_id: null,
               updated_at: new Date(),
@@ -591,12 +592,13 @@ export const cancelPurchase = createServerFn({ method: "POST" })
         await cancelFurySmsNumber(orderIdToCancel).catch(() => {});
       }
 
-      // No OTP received -> keep number available in marketplace!
+      // No OTP received -> put number back in unregistered category (available)!
       await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
-        { phone, owner_user_id: session.userId },
+        { phone, owner_user_id: session.userId, otp: { $in: [null, ""] } },
         {
           $set: {
             status: "available",
+            note: "Cancelled without OTP (Available in Marketplace)",
             active_order_id: null,
             owner_user_id: null,
             updated_at: new Date(),

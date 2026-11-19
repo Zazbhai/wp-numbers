@@ -71,7 +71,26 @@ export async function maintainCheckerPipeline(): Promise<{
   try {
     const db = await getDb();
 
-    // 1. Count currently confirmed unregistered numbers in marketplace
+    // 1. Automatically restore any stale cancelled or timed out pending_otp numbers without OTP (> 20 mins) back to available
+    const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000);
+    await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateMany(
+      {
+        status: "pending_otp",
+        otp: { $in: [null, ""] },
+        updated_at: { $lt: twentyMinsAgo },
+      },
+      {
+        $set: {
+          status: "available",
+          note: "Cancelled/timed out without OTP (Returned to unregistered category)",
+          active_order_id: null,
+          owner_user_id: null,
+          updated_at: new Date(),
+        },
+      }
+    );
+
+    // 2. Count currently confirmed unregistered numbers in marketplace
     const availableCount = await db.collection<WaCheckNumberDoc>("wa_check_numbers").countDocuments({
       status: { $in: ["available", "sent", "found"] },
     });
