@@ -755,7 +755,11 @@ export const getCheckerKey = createServerFn({ method: "GET" })
     return createHash("sha256").update(`wa-checker:${key}`).digest("base64url");
   });
 
-const fetchSchema = z.object({ count: z.number().int().min(1).max(100).default(1) });
+const fetchSchema = z.object({
+  count: z.number().int().min(1).max(100).default(1),
+  service: z.string().trim().optional(),
+  country: z.string().trim().optional(),
+});
 
 export const fetchNumberFromApi = createServerFn({ method: "POST" })
   .middleware([requireAdminAuth])
@@ -770,7 +774,7 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
 
       for (let i = 0; i < count; i++) {
         const { requestFurySmsNumberWithDetails } = await import("./furysms.server");
-        const res = await requestFurySmsNumberWithDetails("boyaah", "22");
+        const res = await requestFurySmsNumberWithDetails(data.service, data.country);
         if (!res.ok) {
           lastError = res.error;
           console.warn(`[fetchNumberFromApi] FurySMS getNumber stopped at ${i}/${count}: ${res.error}`);
@@ -881,5 +885,141 @@ export const recheckNumber = createServerFn({ method: "POST" })
     } catch (error) {
       console.error("[recheckNumber error]:", error);
       return { ok: false as const };
+    }
+  });
+
+export const getCheckerProviderSettings = createServerFn({ method: "GET" })
+  .middleware([requireAdminAuth])
+  .handler(async () => {
+    try {
+      const { getSmsProviderConfig, getFurySmsBalance } = await import("./furysms.server");
+      const config = await getSmsProviderConfig(true);
+      const balance = await getFurySmsBalance().catch(() => null);
+
+      const defaultBaseUrl =
+        process.env["FURYSMS_BASE_URL"] || "https://furysms.shop/stubs/handler_api.php";
+      const defaultService = process.env["FURYSMS_SERVICE_ID"] || "boyaah";
+      const defaultCountry = process.env["FURYSMS_COUNTRY_ID"] || "22";
+
+      return {
+        ok: true as const,
+        settings: {
+          baseUrl: config.baseUrl,
+          serviceId: config.serviceId,
+          countryId: config.countryId,
+          apiKey: config.apiKey || "",
+          balance,
+          defaults: {
+            baseUrl: defaultBaseUrl,
+            serviceId: defaultService,
+            countryId: defaultCountry,
+          },
+        },
+      };
+    } catch (error) {
+      console.error("[getCheckerProviderSettings error]:", error);
+      return { ok: false as const, error: "Failed to load provider settings" };
+    }
+  });
+
+const updateProviderSettingsSchema = z.object({
+  baseUrl: z.string().trim().min(5, "Valid Base URL is required"),
+  serviceId: z.string().trim().min(1, "Service ID is required"),
+  countryId: z.string().trim().min(1, "Country ID is required"),
+  apiKey: z.string().trim().optional(),
+});
+
+export const updateCheckerProviderSettings = createServerFn({ method: "POST" })
+  .middleware([requireAdminAuth])
+  .validator((d: unknown) => updateProviderSettingsSchema.parse(d))
+  .handler(async ({ data }) => {
+    try {
+      const { getDb } = await import("@/integrations/mongodb/client.server");
+      const db = await getDb();
+      const { clearSmsProviderConfigCache, getFurySmsBalance } = await import("./furysms.server");
+
+      const updateDoc: Record<string, any> = {
+        base_url: data.baseUrl,
+        service_id: data.serviceId,
+        country_id: data.countryId,
+        updated_at: new Date(),
+      };
+      if (typeof data.apiKey === "string" && data.apiKey.trim()) {
+        updateDoc["api_key"] = data.apiKey.trim();
+      }
+
+      await db.collection("system_settings").updateOne(
+        { _id: "sms_provider" as any },
+        { $set: updateDoc },
+        { upsert: true },
+      );
+
+      clearSmsProviderConfigCache();
+
+      const balance = await getFurySmsBalance().catch(() => null);
+
+      return {
+        ok: true as const,
+        balance,
+        message: "SMS Provider parameters saved successfully!",
+      };
+    } catch (error) {
+      console.error("[updateCheckerProviderSettings error]:", error);
+      return { ok: false as const, error: "Failed to save provider settings" };
+    }
+  });
+
+const testProviderSettingsSchema = z.object({
+  baseUrl: z.string().trim().min(5, "Base URL is required"),
+  apiKey: z.string().trim().min(1, "API Key is required to test"),
+});
+
+export const testCheckerProviderSettings = createServerFn({ method: "POST" })
+  .middleware([requireAdminAuth])
+  .validator((d: unknown) => testProviderSettingsSchema.parse(d))
+  .handler(async ({ data }) => {
+    try {
+      const { getFurySmsBalance } = await import("./furysms.server");
+      const balance = await getFurySmsBalance({
+        baseUrl: data.baseUrl,
+        apiKey: data.apiKey,
+      });
+
+      if (balance === null) {
+        return {
+          ok: false as const,
+          error: "Connection test failed. Unable to fetch balance with given Base URL & API Key.",
+        };
+      }
+
+      return {
+        ok: true as const,
+        balance,
+        message: `Connection successful! Account balance: ₹${balance}`,
+      };
+    } catch (error) {
+      return { ok: false as const, error: String(error) };
+    }
+  });
+
+export const resetCheckerProviderSettings = createServerFn({ method: "POST" })
+  .middleware([requireAdminAuth])
+  .handler(async () => {
+    try {
+      const { getDb } = await import("@/integrations/mongodb/client.server");
+      const db = await getDb();
+      const { clearSmsProviderConfigCache, getFurySmsBalance } = await import("./furysms.server");
+
+      await db.collection("system_settings").deleteOne({ _id: "sms_provider" as any });
+      clearSmsProviderConfigCache();
+
+      const balance = await getFurySmsBalance().catch(() => null);
+      return {
+        ok: true as const,
+        balance,
+        message: "Settings reset to default environment configuration.",
+      };
+    } catch (error) {
+      return { ok: false as const, error: "Failed to reset provider settings" };
     }
   });

@@ -77,6 +77,15 @@ export interface BharatPePaymentSettingsDoc {
   updated_at: Date;
 }
 
+export interface SmsProviderSettingsDoc {
+  _id: "sms_provider";
+  base_url: string;
+  service_id: string;
+  country_id: string;
+  api_key?: string | null;
+  updated_at: Date;
+}
+
 export interface MarketplacePaymentDoc {
   payment_id: string;
   utr: string;

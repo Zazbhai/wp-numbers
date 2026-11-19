@@ -1,5 +1,23 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { LockKeyhole, LogOut, ShieldAlert } from "lucide-react";
+import {
+  LockKeyhole,
+  LogOut,
+  ShieldAlert,
+  Sliders,
+  Globe,
+  Key,
+  Save,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  Server,
+  Zap,
+} from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   addNumbers,
@@ -10,6 +28,10 @@ import {
   recheckNumber,
   getMonitorStatus,
   startChecker,
+  getCheckerProviderSettings,
+  updateCheckerProviderSettings,
+  testCheckerProviderSettings,
+  resetCheckerProviderSettings,
 } from "@/lib/wa-check.functions";
 import {
   checkAdminAccess,
@@ -106,6 +128,28 @@ function CheckerPage() {
   );
   const [startingEngine, setStartingEngine] = useState(false);
 
+  // SMS Provider parameters state
+  const [providerBaseUrl, setProviderBaseUrl] = useState("");
+  const [providerServiceId, setProviderServiceId] = useState("");
+  const [providerCountryId, setProviderCountryId] = useState("");
+  const [providerApiKey, setProviderApiKey] = useState("");
+  const [providerBalance, setProviderBalance] = useState<number | null>(null);
+  const [providerDefaults, setProviderDefaults] = useState<{
+    baseUrl: string;
+    serviceId: string;
+    countryId: string;
+  } | null>(null);
+  const [providerLoading, setProviderLoading] = useState(false);
+  const [providerSaving, setProviderSaving] = useState(false);
+  const [providerTesting, setProviderTesting] = useState(false);
+  const [providerResetting, setProviderResetting] = useState(false);
+  const [providerMsg, setProviderMsg] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [providerSettingsOpen, setProviderSettingsOpen] = useState(true);
+
   useEffect(() => {
     let mounted = true;
     checkAdminAccess().then(({ isAdmin: adminStatus }) => {
@@ -148,6 +192,25 @@ function CheckerPage() {
     }
   }
 
+  const loadProviderSettings = useCallback(async () => {
+    setProviderLoading(true);
+    try {
+      const res = await getCheckerProviderSettings();
+      if (res.ok && res.settings) {
+        setProviderBaseUrl(res.settings.baseUrl);
+        setProviderServiceId(res.settings.serviceId);
+        setProviderCountryId(res.settings.countryId);
+        setProviderApiKey(res.settings.apiKey || "");
+        setProviderBalance(res.settings.balance);
+        setProviderDefaults(res.settings.defaults);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setProviderLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const [res, mon] = await Promise.all([listNumbers(), getMonitorStatus()]);
@@ -165,10 +228,100 @@ function CheckerPage() {
     if (!adminReady || !isAdmin) return;
     setOrigin(window.location.origin);
     load();
+    loadProviderSettings();
     getCheckerKey().then(setKey);
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
-  }, [adminReady, isAdmin, load]);
+  }, [adminReady, isAdmin, load, loadProviderSettings]);
+
+  async function handleSaveProviderSettings(e: FormEvent) {
+    e.preventDefault();
+    if (!providerBaseUrl.trim() || !providerServiceId.trim() || !providerCountryId.trim()) {
+      setProviderMsg({
+        type: "error",
+        text: "Base URL, Service ID, aur Country ID enter karna zaroori hai.",
+      });
+      return;
+    }
+    setProviderSaving(true);
+    setProviderMsg(null);
+    try {
+      const res = await updateCheckerProviderSettings({
+        data: {
+          baseUrl: providerBaseUrl.trim(),
+          serviceId: providerServiceId.trim(),
+          countryId: providerCountryId.trim(),
+          apiKey: providerApiKey.trim(),
+        },
+      });
+      if (res.ok) {
+        setProviderBalance(res.balance ?? null);
+        setProviderMsg({
+          type: "success",
+          text: `Settings save ho gayi! ${res.balance !== null ? `Live Provider Balance: ₹${res.balance}` : ""}`,
+        });
+      } else {
+        setProviderMsg({ type: "error", text: res.error || "Save karne mein error aayi" });
+      }
+    } catch {
+      setProviderMsg({ type: "error", text: "Provider settings save nahi ho payi." });
+    } finally {
+      setProviderSaving(false);
+    }
+  }
+
+  async function handleTestProviderConnection() {
+    if (!providerBaseUrl.trim() || !providerApiKey.trim()) {
+      setProviderMsg({
+        type: "error",
+        text: "Connection test ke liye Base URL aur API Key dono enter karein.",
+      });
+      return;
+    }
+    setProviderTesting(true);
+    setProviderMsg(null);
+    try {
+      const res = await testCheckerProviderSettings({
+        data: {
+          baseUrl: providerBaseUrl.trim(),
+          apiKey: providerApiKey.trim(),
+        },
+      });
+      if (res.ok) {
+        setProviderBalance(res.balance);
+        setProviderMsg({
+          type: "success",
+          text: `Connection test PASS! Live balance: ₹${res.balance}`,
+        });
+      } else {
+        setProviderMsg({
+          type: "error",
+          text: res.error || "Connection test failed — Base URL ya API Key check karein.",
+        });
+      }
+    } catch {
+      setProviderMsg({ type: "error", text: "Provider endpoint reach nahi ho saka." });
+    } finally {
+      setProviderTesting(false);
+    }
+  }
+
+  async function handleResetProviderSettings() {
+    if (!confirm("Provider settings ko default environment (.env) par reset karna hai?")) return;
+    setProviderResetting(true);
+    setProviderMsg(null);
+    try {
+      const res = await resetCheckerProviderSettings();
+      if (res.ok) {
+        await loadProviderSettings();
+        setProviderMsg({ type: "success", text: "Settings default (.env) par reset ho gayi!" });
+      }
+    } catch {
+      setProviderMsg({ type: "error", text: "Reset fail ho gaya." });
+    } finally {
+      setProviderResetting(false);
+    }
+  }
 
   async function handleStartEngine() {
     setStartingEngine(true);
@@ -205,18 +358,25 @@ function CheckerPage() {
 
   async function onFetchFromApi() {
     setFetching(true);
-    setMsg("FurySMS se numbers fetch ho rahe hain...");
-    const res = await fetchNumberFromApi({ data: { count: fetchCount } });
+    const serviceName = providerServiceId || "SMS API";
+    setMsg(`${serviceName} se numbers fetch ho rahe hain...`);
+    const res = await fetchNumberFromApi({
+      data: {
+        count: fetchCount,
+        service: providerServiceId.trim() || undefined,
+        country: providerCountryId.trim() || undefined,
+      },
+    });
     setFetching(false);
     if (res.ok && res.phones) {
       setMsg(
         res.note
           ? res.note
-          : `FurySMS se ${res.phones.length} naye number queue mein add kiye gaye aur checking shuru ho gayi!`,
+          : `${serviceName} se ${res.phones.length} naye number queue mein add kiye gaye aur checking shuru ho gayi!`,
       );
       load();
     } else {
-      setMsg(res.error || "FurySMS se number nahi mile");
+      setMsg(res.error || `${serviceName} se number nahi mile`);
     }
   }
 
@@ -424,12 +584,272 @@ function CheckerPage() {
         </div>
       </div>
 
+      {/* Provider API Parameters Section */}
+      <section className="mt-8 rounded-xl border bg-card p-5 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Sliders className="size-5" />
+            </div>
+            <div>
+              <h2 className="font-bold text-base flex items-center gap-2">
+                SMS Provider API Parameters
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-500/30">
+                  Live Parameters
+                </span>
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Base URL, Service ID, Country ID aur API Key parameters ko yahan se easily change karein.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold border ${
+                providerBalance !== null
+                  ? "bg-emerald-500/10 text-emerald-700 border-emerald-500/30"
+                  : "bg-muted text-muted-foreground border-border"
+              }`}
+            >
+              <Zap className="size-3.5" />
+              <span>
+                {providerBalance !== null
+                  ? `Balance: ₹${providerBalance.toFixed(2)}`
+                  : "Balance: Not connected"}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setProviderSettingsOpen((prev) => !prev)}
+              aria-label="Toggle provider parameters"
+              className="rounded-lg border p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition"
+            >
+              {providerSettingsOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </button>
+          </div>
+        </div>
+
+        {providerSettingsOpen && (
+          <form onSubmit={handleSaveProviderSettings} className="mt-4 space-y-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Globe className="size-3.5 text-primary" />
+                  API Base URL (Handler URL)
+                </label>
+                {providerDefaults && (
+                  <button
+                    type="button"
+                    onClick={() => setProviderBaseUrl(providerDefaults.baseUrl)}
+                    className="text-[11px] text-muted-foreground hover:text-primary transition underline"
+                  >
+                    Set default URL
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={providerBaseUrl}
+                onChange={(e) => setProviderBaseUrl(e.target.value)}
+                placeholder="https://furysms.shop/stubs/handler_api.php"
+                className="mt-1.5 w-full rounded-lg border bg-background px-3.5 py-2.5 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                required
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Upstream provider handler URL (supports FurySMS, SMS-Activate protocol, 5SIM protocol handlers).
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Server className="size-3.5 text-primary" />
+                    Service ID (Code)
+                  </label>
+                  {providerDefaults && (
+                    <button
+                      type="button"
+                      onClick={() => setProviderServiceId(providerDefaults.serviceId)}
+                      className="text-[11px] text-muted-foreground hover:text-primary transition underline"
+                    >
+                      Default ({providerDefaults.serviceId})
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={providerServiceId}
+                  onChange={(e) => setProviderServiceId(e.target.value)}
+                  placeholder="boyaah"
+                  className="mt-1.5 w-full rounded-lg border bg-background px-3.5 py-2.5 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                  required
+                />
+                <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px]">
+                  <span className="text-muted-foreground">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => setProviderServiceId("boyaah")}
+                    className={`rounded px-1.5 py-0.5 transition ${providerServiceId === "boyaah" ? "bg-primary/20 text-primary font-bold" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                  >
+                    boyaah (WA Special)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProviderServiceId("wa")}
+                    className={`rounded px-1.5 py-0.5 transition ${providerServiceId === "wa" ? "bg-primary/20 text-primary font-bold" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                  >
+                    wa (Standard WhatsApp)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Globe className="size-3.5 text-primary" />
+                    Country Code (ID)
+                  </label>
+                  {providerDefaults && (
+                    <button
+                      type="button"
+                      onClick={() => setProviderCountryId(providerDefaults.countryId)}
+                      className="text-[11px] text-muted-foreground hover:text-primary transition underline"
+                    >
+                      Default ({providerDefaults.countryId})
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={providerCountryId}
+                  onChange={(e) => setProviderCountryId(e.target.value)}
+                  placeholder="22"
+                  className="mt-1.5 w-full rounded-lg border bg-background px-3.5 py-2.5 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                  required
+                />
+                <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px]">
+                  <span className="text-muted-foreground">Presets:</span>
+                  <button
+                    type="button"
+                    onClick={() => setProviderCountryId("22")}
+                    className={`rounded px-1.5 py-0.5 transition ${providerCountryId === "22" ? "bg-primary/20 text-primary font-bold" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                  >
+                    22 (India +91)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProviderCountryId("0")}
+                    className={`rounded px-1.5 py-0.5 transition ${providerCountryId === "0" ? "bg-primary/20 text-primary font-bold" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                  >
+                    0 (Russia +7)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProviderCountryId("6")}
+                    className={`rounded px-1.5 py-0.5 transition ${providerCountryId === "6" ? "bg-primary/20 text-primary font-bold" : "bg-muted text-muted-foreground hover:text-foreground"}`}
+                  >
+                    6 (Indonesia +62)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Key className="size-3.5 text-primary" />
+                Provider API Key
+              </label>
+              <div className="relative mt-1.5">
+                <input
+                  type={showApiKey ? "text" : "password"}
+                  value={providerApiKey}
+                  onChange={(e) => setProviderApiKey(e.target.value)}
+                  placeholder="Enter upstream API key"
+                  className="w-full rounded-lg border bg-background px-3.5 py-2.5 pr-10 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowApiKey((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showApiKey ? "Hide API Key" : "Show API Key"}
+                >
+                  {showApiKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Secret API key for account authorization. Leave blank to keep existing key.
+              </p>
+            </div>
+
+            {providerMsg && (
+              <div
+                className={`flex items-center gap-2 rounded-lg p-3 text-xs font-medium border ${
+                  providerMsg.type === "success"
+                    ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-800 border-rose-500/30"
+                }`}
+              >
+                {providerMsg.type === "success" ? (
+                  <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
+                ) : (
+                  <AlertCircle className="size-4 shrink-0 text-rose-600" />
+                )}
+                <span>{providerMsg.text}</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={providerSaving || providerLoading}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition disabled:opacity-50"
+                >
+                  <Save className="size-3.5" />
+                  <span>{providerSaving ? "Saving..." : "Save Parameters"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestProviderConnection}
+                  disabled={providerTesting || providerLoading || !providerBaseUrl || !providerApiKey}
+                  className="inline-flex items-center gap-1.5 rounded-lg border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-accent transition disabled:opacity-50"
+                >
+                  <RefreshCw className={`size-3.5 ${providerTesting ? "animate-spin" : ""}`} />
+                  <span>{providerTesting ? "Testing..." : "Test Connection"}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetProviderSettings}
+                disabled={providerResetting || providerLoading}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition underline disabled:opacity-50"
+              >
+                <RotateCcw className="size-3" />
+                <span>Reset to .env defaults</span>
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
       {/* Add / Fetch numbers */}
       <form onSubmit={onAdd} className="mt-8 rounded-xl border bg-card p-5">
-        <h2 className="font-bold">Numbers jodein ya FurySMS se auto-pull karein</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Ek line mein ek number — ya direct FurySMS API se numbers lein.
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="font-bold">Numbers jodein ya SMS API se auto-pull karein</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ek line mein ek number — ya direct configured SMS provider se numbers lein.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/60 px-3 py-1.5 rounded-lg font-mono w-fit">
+            <span>Service: <strong className="text-foreground">{providerServiceId || "boyaah"}</strong></span>
+            <span>•</span>
+            <span>Country: <strong className="text-foreground">{providerCountryId || "22"}</strong></span>
+          </div>
+        </div>
         <textarea
           name="numbers"
           rows={3}
@@ -460,9 +880,16 @@ function CheckerPage() {
             type="button"
             onClick={onFetchFromApi}
             disabled={fetching}
-            className="rounded-lg border border-primary/50 bg-primary/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-primary/20 disabled:opacity-60"
+            className="rounded-lg border border-primary/50 bg-primary/10 px-5 py-2.5 text-sm font-semibold transition hover:bg-primary/20 disabled:opacity-60 flex items-center gap-1.5"
           >
-            {fetching ? "FurySMS se aa raha hai..." : "FurySMS se fresh number lo"}
+            {fetching ? (
+              <>
+                <RefreshCw className="size-4 animate-spin" />
+                <span>Pulling numbers...</span>
+              </>
+            ) : (
+              <span>Fresh numbers pull karein ({providerServiceId || "boyaah"})</span>
+            )}
           </button>
         </div>
         {msg && <p className="mt-3 text-sm text-muted-foreground font-medium">{msg}</p>}

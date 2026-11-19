@@ -28,7 +28,7 @@ export async function refillPendingNumbers(db: Db, target = 6) {
     if (need <= 0) return;
 
     for (let i = 0; i < need; i++) {
-      const res = await requestFurySmsNumber("boyaah", "22");
+      const res = await requestFurySmsNumber();
       if (!res) {
         // Break early if balance empty or temporary FurySMS issue
         break;

@@ -53,7 +53,7 @@ export async function maintainCheckerPipeline(): Promise<{
       const batchSize = Math.min(10, Math.max(0, 10 - pendingCount));
       if (batchSize > 0) {
         for (let i = 0; i < batchSize; i++) {
-          const res = await requestFurySmsNumber("boyaah", "22");
+          const res = await requestFurySmsNumber();
           if (!res) {
             break;
           }
