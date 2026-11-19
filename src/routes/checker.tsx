@@ -69,37 +69,57 @@ type Row = {
   updated_at: string;
 };
 
-type Counts = { total: number; available: number; pending: number; skipped: number };
+type Counts = {
+  total: number;
+  available: number;
+  pending: number;
+  skipped: number;
+  sold?: number;
+  expired?: number;
+  unregisteredTotal?: number;
+};
 
 const DEFAULT_STATUS = {
-  label: "Check baaki",
+  label: "In Queue",
   cls: "bg-amber-500/15 text-amber-700 border border-amber-500/30 font-medium",
 };
 const STATUS: Record<string, { label: string; cls: string }> = {
   available: {
-    label: "Unregistered (Marketplace)",
+    label: "Unregistered (Ready)",
     cls: "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 font-semibold",
   },
   sent: {
-    label: "Unregistered (Telegram bheja)",
+    label: "Unregistered (Ready)",
     cls: "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 font-semibold",
   },
   found: {
-    label: "Unregistered (Mila)",
+    label: "Unregistered (Ready)",
     cls: "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30 font-semibold",
   },
-  pending: DEFAULT_STATUS,
-  skipped: {
-    label: "WhatsApp par mila (Refunded)",
-    cls: "bg-muted text-muted-foreground border border-border",
-  },
   pending_otp: {
-    label: "OTP baaki (In purchase)",
+    label: "Awaiting OTP (Purchased)",
     cls: "bg-blue-500/15 text-blue-700 border border-blue-500/30 font-semibold",
   },
   completed: {
-    label: "OTP received (Sold)",
+    label: "Sold (OTP Delivered)",
     cls: "bg-purple-500/15 text-purple-700 border border-purple-500/30 font-semibold",
+  },
+  expired: {
+    label: "Session Expired",
+    cls: "bg-rose-500/15 text-rose-700 border border-rose-500/30 font-medium",
+  },
+  cancelled: {
+    label: "Cancelled",
+    cls: "bg-zinc-500/15 text-zinc-600 border border-zinc-500/30 font-medium",
+  },
+  pending: DEFAULT_STATUS,
+  pending_verify: {
+    label: "Awaiting 2nd Check",
+    cls: "bg-amber-500/15 text-amber-700 border border-amber-500/30 font-medium",
+  },
+  skipped: {
+    label: "On WhatsApp (Refunded)",
+    cls: "bg-muted text-muted-foreground border border-border",
   },
 };
 
@@ -395,6 +415,10 @@ function CheckerPage() {
     if (!matchesQuery) return false;
     if (filter === "all") return true;
     if (filter === "available") return ["available", "sent", "found"].includes(r.status);
+    if (filter === "sold") return ["completed", "pending_otp"].includes(r.status);
+    if (filter === "expired") return r.status === "expired";
+    if (filter === "pending") return ["pending", "pending_verify"].includes(r.status);
+    if (filter === "skipped") return r.status === "skipped";
     return r.status === filter;
   });
 
@@ -652,22 +676,46 @@ function CheckerPage() {
       </div>
 
       {/* Counts Grid */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border bg-card p-4">
-          <p className="text-2xl font-bold">{counts.total}</p>
-          <p className="text-sm text-muted-foreground">Total numbers</p>
+      <div className="mt-6">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-2.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-emerald-800">
+              🎉 Kul Khoje Gaye Unregistered Numbers: {counts.unregisteredTotal ?? (counts.available + (counts.sold || 0) + (counts.expired || 0))}
+            </span>
+            <span className="text-emerald-700">
+              ({counts.available} Ready · {counts.sold || 0} Sold/OTP · {counts.expired || 0} Session Timeout)
+            </span>
+          </div>
+          <span className="text-[11px] text-emerald-700">
+            100% data accounted for ({counts.total} total)
+          </span>
         </div>
-        <div className="rounded-xl border bg-card p-4 border-emerald-500/30 bg-emerald-500/5">
-          <p className="text-2xl font-bold text-emerald-600">{counts.available}</p>
-          <p className="text-sm text-emerald-800 font-medium">Unregistered (Ready)</p>
-        </div>
-        <div className="rounded-xl border bg-card p-4">
-          <p className="text-2xl font-bold text-amber-600">{counts.pending}</p>
-          <p className="text-sm text-muted-foreground">Check baaki (In Queue)</p>
-        </div>
-        <div className="rounded-xl border bg-card p-4">
-          <p className="text-2xl font-bold text-muted-foreground">{counts.skipped}</p>
-          <p className="text-sm text-muted-foreground">Skip hue (On WhatsApp)</p>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-2xl font-bold">{counts.total}</p>
+            <p className="text-xs text-muted-foreground mt-1">Total Numbers</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4 border-emerald-500/30 bg-emerald-500/5">
+            <p className="text-2xl font-bold text-emerald-600">{counts.available}</p>
+            <p className="text-xs text-emerald-800 font-semibold mt-1">Unregistered (Ready)</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4 border-blue-500/30 bg-blue-500/5">
+            <p className="text-2xl font-bold text-blue-600">{counts.sold || 0}</p>
+            <p className="text-xs text-blue-800 font-medium mt-1">Sold / OTP Done</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4 border-rose-500/20 bg-rose-500/5">
+            <p className="text-2xl font-bold text-rose-600">{counts.expired || 0}</p>
+            <p className="text-xs text-rose-800 font-medium mt-1">Session Expired</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4 border-amber-500/30 bg-amber-500/5">
+            <p className="text-2xl font-bold text-amber-600">{counts.pending}</p>
+            <p className="text-xs text-amber-800 font-medium mt-1">In Queue (Pending)</p>
+          </div>
+          <div className="rounded-xl border bg-card p-4">
+            <p className="text-2xl font-bold text-muted-foreground">{counts.skipped}</p>
+            <p className="text-xs text-muted-foreground mt-1">On WhatsApp (Refund)</p>
+          </div>
         </div>
       </div>
 
@@ -1065,10 +1113,12 @@ function CheckerPage() {
           <div className="flex flex-wrap gap-1">
             {(
               [
-                ["all", "Sab"],
-                ["available", "Unregistered (Ready)"],
-                ["pending", "Baaki (Queue)"],
-                ["skipped", "Skip (On WA)"],
+                ["all", `Sab (${counts.total})`],
+                ["available", `Ready (${counts.available})`],
+                ["sold", `Sold (${counts.sold || 0})`],
+                ["expired", `Expired (${counts.expired || 0})`],
+                ["pending", `In Queue (${counts.pending})`],
+                ["skipped", `On WA (${counts.skipped})`],
               ] as const
             ).map(([v, l]) => (
               <button

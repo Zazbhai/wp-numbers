@@ -115,7 +115,7 @@ export const listMarketplaceNumbers = createServerFn({ method: "GET" })
 
       return {
         ok: true as const,
-        numbers: [],
+        numbers,
         stats: {
           totalAvailable: availableDocs.length,
           targetUnregistered: UNREGISTERED_TARGET,
@@ -695,19 +695,29 @@ export const listNumbers = createServerFn({ method: "GET" })
       const { getDb } = await import("@/integrations/mongodb/client.server");
       const db = await getDb();
       const numbersCollection = db.collection<WaCheckNumberDoc>("wa_check_numbers");
-      const [docs, totalCount, availableCount, pendingCount, skippedCount] = await Promise.all([
+      const [
+        docs,
+        totalCount,
+        availableCount,
+        pendingCount,
+        skippedCount,
+        soldCount,
+        expiredCount,
+      ] = await Promise.all([
         numbersCollection
           .find(
             {},
             { projection: { _id: 0, phone: 1, status: 1, note: 1, created_at: 1, updated_at: 1 } },
           )
-          .sort({ created_at: -1 })
-          .limit(500)
+          .sort({ updated_at: -1, created_at: -1 })
+          .limit(1000)
           .toArray(),
         numbersCollection.countDocuments(),
         numbersCollection.countDocuments({ status: { $in: MARKETPLACE_READY_STATUSES } }),
         numbersCollection.countDocuments({ status: { $in: CHECK_QUEUE_STATUSES } }),
         numbersCollection.countDocuments({ status: "skipped" }),
+        numbersCollection.countDocuments({ status: { $in: ["completed", "pending_otp"] } }),
+        numbersCollection.countDocuments({ status: "expired" }),
       ]);
 
       const numbers = docs.map((d) => ({
@@ -728,13 +738,16 @@ export const listNumbers = createServerFn({ method: "GET" })
           available: availableCount,
           pending: pendingCount,
           skipped: skippedCount,
+          sold: soldCount,
+          expired: expiredCount,
+          unregisteredTotal: availableCount + soldCount + expiredCount,
         },
       };
     } catch (error) {
       console.error("[listNumbers error]:", error);
       return {
         ok: false as const,
-        counts: { total: 0, available: 0, pending: 0, skipped: 0 },
+        counts: { total: 0, available: 0, pending: 0, skipped: 0, sold: 0, expired: 0, unregisteredTotal: 0 },
         numbers: [] as {
           phone: string;
           status: string;
@@ -770,6 +783,8 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       const db = await getDb();
       const count = Math.min(Math.max(data.count, 1), 25);
       const addedPhones: string[] = [];
+      let newlyInserted = 0;
+      let recycledExisting = 0;
       let lastError = "";
 
       for (let i = 0; i < count; i++) {
@@ -782,7 +797,7 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
         }
 
         const now = new Date();
-        await db.collection("wa_check_numbers").updateOne(
+        const updateResult = await db.collection("wa_check_numbers").updateOne(
           { phone: res.phone },
           {
             $setOnInsert: { phone: res.phone, created_at: now },
@@ -795,6 +810,11 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
           },
           { upsert: true },
         );
+        if (updateResult.upsertedCount > 0) {
+          newlyInserted++;
+        } else {
+          recycledExisting++;
+        }
         addedPhones.push(res.phone);
         if (i < count - 1) {
           await new Promise((r) => setTimeout(r, 800));
@@ -807,16 +827,29 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       if (addedPhones.length === 0) {
         return {
           ok: false as const,
-          error: lastError ? `FurySMS reply: ${lastError}` : "FurySMS se koi number nahi mila",
+          error: lastError ? `Provider reply: ${lastError}` : "Provider se koi number nahi mila",
         };
       }
 
-      const note =
-        addedPhones.length < count
-          ? `FurySMS se ${addedPhones.length} numbers mile (${count} maange the; FurySMS: ${lastError || "Out of stock"})`
-          : undefined;
+      const noteParts: string[] = [];
+      if (addedPhones.length < count) {
+        noteParts.push(`Provider ne ${addedPhones.length} numbers diye (${count} maange the, Provider reason: ${lastError || "Out of stock"}).`);
+      }
+      if (newlyInserted > 0 && recycledExisting > 0) {
+        noteParts.push(`${newlyInserted} naye number Total mein add hue, aur ${recycledExisting} purane number queue mein dobara check ke liye dale gaye.`);
+      } else if (recycledExisting > 0 && newlyInserted === 0) {
+        noteParts.push(`Sabhi ${recycledExisting} number pehle se database mein the (Total count isliye nahi badha, inka status reset ho kar Queue mein check hone ke liye chala gaya).`);
+      } else if (newlyInserted > 0) {
+        noteParts.push(`${newlyInserted} naye number queue mein check hone ke liye add kiye gaye.`);
+      }
 
-      return { ok: true as const, phones: addedPhones, note };
+      return {
+        ok: true as const,
+        phones: addedPhones,
+        newlyInserted,
+        recycledExisting,
+        note: noteParts.join(" "),
+      };
     } catch (error) {
       console.error("[fetchNumberFromApi error]:", error);
       return { ok: false as const, error: "API se number lene mein error aayi" };

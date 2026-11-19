@@ -111,7 +111,8 @@ export const Route = createFileRoute("/api/public/wa-result")({
           const { getDb } = await import("@/integrations/mongodb/client.server");
           const db = await getDb();
 
-          const row = await db.collection<WaCheckNumberDoc>("wa_check_numbers").findOne({ phone });
+          const phoneVariants = [phone, phone.replace(/^\+/, ""), phone.startsWith("+") ? phone : `+${phone}`];
+          const row = await db.collection<WaCheckNumberDoc>("wa_check_numbers").findOne({ phone: { $in: phoneVariants } });
           if (!row) return Response.json({ ok: false }, { status: 404 });
           // Only process numbers that are pending a check (first or second pass)
           if (row["status"] !== "pending" && row["status"] !== "pending_verify") {
@@ -123,7 +124,7 @@ export const Route = createFileRoute("/api/public/wa-result")({
           if (found) {
             // Confirmed unregistered! Immediately mark as available for Marketplace
             await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
-              { phone },
+              { phone: row["phone"] },
               {
                 $set: {
                   status: "available",
@@ -163,7 +164,7 @@ export const Route = createFileRoute("/api/public/wa-result")({
             }
 
             await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
-              { phone },
+              { phone: row["phone"] },
               {
                 $set: {
                   status: "skipped",

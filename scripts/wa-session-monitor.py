@@ -142,13 +142,13 @@ async def safe_click(locator, page=None, name="element"):
             pass
     return False
 
-TRIGGER = re.compile(r"isn.t on WhatsApp|not on WhatsApp|invalid|Invite to WhatsApp", re.I)
+TRIGGER = re.compile(r"isn.t on WhatsApp|not on WhatsApp|invalid|Invite to WhatsApp|not registered|no account found|नहीं है|अमान्य", re.I)
 CHECK_WORKERS = 1
 
 async def check_one(page, phone):
     """Returns True (not on WhatsApp), False (on WhatsApp) or None (unclear, keep pending).
     
-    Uses in-process double-confirmation: if the trigger dialog fires, we wait 2 seconds
+    Uses in-process double-confirmation: if the trigger dialog fires, we wait 1.5 seconds
     and re-verify before concluding unregistered. This eliminates false positives from
     transient WhatsApp Web loading states.
     """
@@ -186,28 +186,37 @@ async def check_one(page, phone):
             return False
 
         # 4. Check for invalid / not on WhatsApp message anywhere on page or modal (Number is NOT registered)
+        unreg_text = ""
         unreg_el = page.get_by_text(TRIGGER).first
         if await unreg_el.is_visible():
             try:
-                text = (await unreg_el.inner_text()).strip()
+                unreg_text = (await unreg_el.inner_text()).strip()
             except Exception:
-                text = ""
-            if text and TRIGGER.search(text):
-                if first_trigger_at is None:
-                    print(f"[{phone}] Unregistered text detected: '{text}'. Confirming...", flush=True)
-                    first_trigger_at = asyncio.get_event_loop().time()
-                else:
-                    elapsed = asyncio.get_event_loop().time() - first_trigger_at
-                    if elapsed >= 2.0:
-                        print(f"[{phone}] Dialog confirmed for 2s! -> UNREGISTERED on WhatsApp! 🎉", flush=True)
-                        ok_btn = page.locator(':is(button, div[role="button"]):has-text("OK")').first
-                        if await ok_btn.is_visible():
-                            await safe_click(ok_btn, page, "OK button")
-                        return True
-            elif "starting chat" in text.lower() or "connecting" in text.lower() or "loading" in text.lower():
-                pass
-            elif text:
-                print(f"[{phone}] Dialog text: '{text}' (waiting...)", flush=True)
+                unreg_text = ""
+
+        # Also inspect modal / dialog directly in case of shadow DOM or custom wrapper
+        if not unreg_text:
+            modal = page.locator('div[role="dialog"], div[data-animate-modal-popup="true"], [data-testid="popup-contents"]').first
+            if await modal.is_visible():
+                try:
+                    modal_text = (await modal.inner_text()).strip()
+                    if TRIGGER.search(modal_text):
+                        unreg_text = modal_text
+                except Exception:
+                    pass
+
+        if unreg_text and TRIGGER.search(unreg_text):
+            if first_trigger_at is None:
+                print(f"[{phone}] Unregistered text detected: '{unreg_text[:80]}'. Confirming...", flush=True)
+                first_trigger_at = asyncio.get_event_loop().time()
+            else:
+                elapsed = asyncio.get_event_loop().time() - first_trigger_at
+                if elapsed >= 1.5:
+                    print(f"[{phone}] Dialog confirmed for {elapsed:.1f}s! -> UNREGISTERED on WhatsApp! 🎉", flush=True)
+                    ok_btn = page.locator(':is(button, div[role="button"]):has-text("OK"), :is(button, div[role="button"]):has-text("Close")').first
+                    if await ok_btn.is_visible():
+                        await safe_click(ok_btn, page, "OK button")
+                    return True
         elif first_trigger_at is not None:
             first_trigger_at = None
 

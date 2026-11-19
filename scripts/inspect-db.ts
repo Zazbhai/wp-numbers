@@ -13,6 +13,13 @@ async function main() {
   await client.connect();
   const db = client.db("register_checker");
   
+  const nonPlus = await db.collection("wa_check_numbers").countDocuments({ phone: { $not: /^\+/ } });
+  console.log("Non-plus count:", nonPlus);
+  if (nonPlus > 0) {
+    const samples = await db.collection("wa_check_numbers").find({ phone: { $not: /^\+/ } }).limit(5).toArray();
+    console.log("Non-plus samples:", samples.map((s) => s.phone));
+  }
+
   const counts = await db.collection("wa_check_numbers").aggregate([
     { $group: { _id: "$status", count: { $sum: 1 } } }
   ]).toArray();
