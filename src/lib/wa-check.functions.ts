@@ -872,8 +872,19 @@ export const getMonitorStatus = createServerFn({ method: "GET" })
 
       let logs = "";
       try {
-        const logContent = await readFile(path.join(slotDir, "monitor.log"), "utf8");
-        const lines = logContent.trim().split("\n");
+        const logPath = path.join(slotDir, "monitor.log");
+        const { stat, open } = await import("fs/promises");
+        const fileStat = await stat(logPath);
+        const size = fileStat.size;
+        const bytesToRead = Math.min(size, 16384);
+        const buffer = Buffer.alloc(bytesToRead);
+        const fd = await open(logPath, "r");
+        try {
+          await fd.read(buffer, 0, bytesToRead, Math.max(0, size - bytesToRead));
+        } finally {
+          await fd.close();
+        }
+        const lines = buffer.toString("utf8").trim().split("\n");
         logs = lines.slice(-30).join("\n");
       } catch {
         logs = "No log output available yet.";

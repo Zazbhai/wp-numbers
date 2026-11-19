@@ -27,7 +27,12 @@ export async function isRunning(slot: number): Promise<boolean> {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code === "EPERM") {
+      // Process exists and is running under another user (e.g. root)
+      return true;
+    }
     return false;
   }
 }
