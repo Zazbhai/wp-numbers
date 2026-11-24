@@ -13,7 +13,7 @@ beforeAll(() => {
     // ignore
   }
   if (!process.env["BUSINESS_LINES_ADMIN_KEY"]) {
-    process.env["BUSINESS_LINES_ADMIN_KEY"] = "nigga";
+    process.env["BUSINESS_LINES_ADMIN_KEY"] = "test-admin-key";
   }
 });
 
@@ -33,7 +33,7 @@ describe("admin-auth.server", () => {
   });
 
   it("authenticates requests with valid x-admin-key header", () => {
-    const validKey = process.env["BUSINESS_LINES_ADMIN_KEY"] || "nigga";
+    const validKey = process.env["BUSINESS_LINES_ADMIN_KEY"] || "test-admin-key";
     const req = new Request("http://localhost:8080/checker", {
       headers: { "x-admin-key": validKey },
     });

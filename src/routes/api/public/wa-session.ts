@@ -29,7 +29,14 @@ export const Route = createFileRoute("/api/public/wa-session")({
 
           // A logged-out session cannot reconnect under the same id. The monitor creates a new id.
           if (previous?.["state"] !== "logged_out") {
-            const updateDoc: any = {
+            const updateDoc: {
+              $set: {
+                session_id: string;
+                state: "connected" | "logged_out";
+                updated_at: Date;
+                alert_state?: "pending";
+              };
+            } = {
               $set: {
                 session_id: sessionId,
                 state,
@@ -43,9 +50,24 @@ export const Route = createFileRoute("/api/public/wa-session")({
           }
 
           // Retry pending alerts on every report; no browser page must stay open for this.
+          const staleSendingBefore = new Date(Date.now() - 60_000);
           const pending = await db
             .collection<WaSessionDoc>("wa_sessions")
-            .find({ alert_state: "pending" }, { projection: { session_id: 1 } })
+            .find(
+              {
+                $or: [
+                  { alert_state: "pending" },
+                  {
+                    alert_state: "sending",
+                    $or: [
+                      { alert_attempted_at: { $lt: staleSendingBefore } },
+                      { alert_attempted_at: { $exists: false } },
+                    ],
+                  },
+                ],
+              },
+              { projection: { session_id: 1 } },
+            )
             .sort({ updated_at: 1 })
             .limit(10)
             .toArray();
@@ -62,8 +84,20 @@ export const Route = createFileRoute("/api/public/wa-session")({
               for (const alert of pending) {
                 const targetSessionId = alert["session_id"];
                 const claimed = await db.collection<WaSessionDoc>("wa_sessions").findOneAndUpdate(
-                  { session_id: targetSessionId, alert_state: "pending" },
-                  { $set: { alert_state: "sending" } },
+                  {
+                    session_id: targetSessionId,
+                    $or: [
+                      { alert_state: "pending" },
+                      {
+                        alert_state: "sending",
+                        $or: [
+                          { alert_attempted_at: { $lt: staleSendingBefore } },
+                          { alert_attempted_at: { $exists: false } },
+                        ],
+                      },
+                    ],
+                  },
+                  { $set: { alert_state: "sending", alert_attempted_at: new Date() } },
                   { returnDocument: "after" }
                 );
 
@@ -78,7 +112,13 @@ export const Route = createFileRoute("/api/public/wa-session")({
                   console.error(`Telegram logout alert failed: ${sendRes.error}`);
                   await db.collection<WaSessionDoc>("wa_sessions").updateOne(
                     { session_id: targetSessionId },
-                    { $set: { alert_state: "pending", alert_error: sendRes.error ?? null } }
+                    {
+                      $set: {
+                        alert_state: "pending",
+                        alert_error: sendRes.error ?? null,
+                        alert_attempted_at: new Date(),
+                      },
+                    }
                   );
                   return Response.json({ ok: false, error: sendRes.error }, { status: 502 });
                 }
@@ -90,6 +130,7 @@ export const Route = createFileRoute("/api/public/wa-session")({
                       alert_state: "sent",
                       telegram_message_id: sendRes.messageId ?? null,
                       alert_error: null,
+                      alert_attempted_at: new Date(),
                     },
                   }
                 );

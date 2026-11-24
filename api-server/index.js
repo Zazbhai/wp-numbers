@@ -8,7 +8,7 @@ import "dotenv/config";
 import http from "node:http";
 import { createHash, randomBytes } from "node:crypto";
 import { getDb, closeDb } from "./db.js";
-import { regetFurySmsNumber, checkFurySmsStatus } from "./furysms.js";
+import { regetFurySmsNumber, checkFurySmsStatus, cancelFurySmsNumber } from "./furysms.js";
 
 const PORT = Number(process.env.PORT || process.env.API_PORT || 5000);
 const NUMBER_PRICE = Number(process.env.NUMBER_PRICE || 49);
@@ -621,10 +621,16 @@ async function handleRequest(req, res) {
         return sendText(res, `STATUS_OK:${resStatus.code}`);
       }
       if (resStatus.status === "CANCELLED") {
-        await db.collection("api_orders").updateOne(
-          { order_id: orderId },
+        const cancelled = await db.collection("api_orders").updateOne(
+          { order_id: orderId, api_key: hashKey(rawKey), status: "waiting" },
           { $set: { status: "cancelled", updated_at: new Date() } }
         );
+        if (cancelled.modifiedCount === 1 && !keyDoc.unlimited) {
+          await db.collection("api_keys").updateOne(
+            { key: hashKey(rawKey) },
+            { $inc: { balance: NUMBER_PRICE }, $set: { updated_at: new Date() } }
+          );
+        }
         // Put back in unregistered category if that number didn't get an OTP
         if (!numDoc.otp && !order.otp) {
           await db.collection("wa_check_numbers").updateOne(
@@ -665,6 +671,7 @@ async function handleRequest(req, res) {
     });
     if (!order) return sendText(res, "NO_ACTIVATION");
     if (order.status === "ok") return sendText(res, "ACCESS_ACTIVATION");
+    if (order.status === "cancelled") return sendText(res, "STATUS_CANCEL");
 
     if (statusParam === "8") {
       // 2-minute cancellation cooldown check
@@ -675,10 +682,16 @@ async function handleRequest(req, res) {
       }
 
       const now = new Date();
-      await db.collection("api_orders").updateOne(
-        { order_id: orderId },
+      const cancelled = await db.collection("api_orders").updateOne(
+        { order_id: orderId, api_key: hashKey(rawKey), status: "waiting" },
         { $set: { status: "cancelled", updated_at: now } }
       );
+      if (cancelled.modifiedCount === 0) return sendText(res, "STATUS_CANCEL");
+
+      const numberDoc = await db.collection("wa_check_numbers").findOne({ phone: order.phone });
+      if (numberDoc?.active_order_id) {
+        await cancelFurySmsNumber(numberDoc.active_order_id).catch(() => false);
+      }
 
       // Put back in unregistered category if that number didn't get an OTP
       if (!order.otp) {

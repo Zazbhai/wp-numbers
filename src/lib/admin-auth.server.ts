@@ -46,8 +46,12 @@ export function isRequestAdmin(request?: Request | Headers | null): boolean {
 
     if (cookieHeader) {
       const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${ADMIN_COOKIE_NAME}=([^;]+)`));
-      if (match && match[1] && verifyAdminToken(decodeURIComponent(match[1]))) {
-        return true;
+      if (match && match[1]) {
+        try {
+          if (verifyAdminToken(decodeURIComponent(match[1]))) return true;
+        } catch {
+          // Ignore malformed cookie values and continue with other auth sources.
+        }
       }
     }
   }

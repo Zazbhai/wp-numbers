@@ -62,6 +62,10 @@ export interface WaCheckNumberDoc {
   bought_at?: Date | null;
   verify_count?: number; // how many times "unregistered" was confirmed
   first_found_at?: Date | null; // timestamp of first unregistered detection
+  checker_slot?: number | null;
+  checker_claimed_at?: Date | null;
+  checker_claim_until?: Date | null;
+  checker_claim_id?: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -128,6 +132,7 @@ export interface WaSessionDoc {
   state: "connected" | "logged_out";
   updated_at: Date;
   alert_state: "none" | "pending" | "sending" | "sent";
+  alert_attempted_at?: Date | null;
   telegram_message_id?: number | null;
   alert_error?: string | null;
 }

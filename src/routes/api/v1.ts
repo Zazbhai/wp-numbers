@@ -13,6 +13,9 @@ import type {
   WaCheckNumberDoc,
 } from "@/integrations/mongodb/client.server";
 import type { Collection } from "mongodb";
+import { cancelFurySmsNumber } from "@/lib/furysms.server";
+
+const NUMBER_PRICE = Number(process.env["NUMBER_PRICE"] || 49);
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -260,7 +263,7 @@ async function handleApi(request: Request) {
           const keyDoc = await resolveKey(rawKey);
           if (!keyDoc) return txt("BAD_KEY");
 
-          if (!keyDoc.unlimited && keyDoc.balance < 49) return txt("NO_BALANCE");
+          if (!keyDoc.unlimited && Number(keyDoc.balance || 0) < NUMBER_PRICE) return txt("NO_BALANCE");
 
           const { getDb } = await import("@/integrations/mongodb/client.server");
           const db = await getDb();
@@ -323,7 +326,7 @@ async function handleApi(request: Request) {
               .collection<ApiKeyDoc>("api_keys")
               .updateOne(
                 { key: hashKey(rawKey) },
-                { $inc: { balance: -49 }, $set: { updated_at: now } },
+                { $inc: { balance: -NUMBER_PRICE }, $set: { updated_at: now } },
               );
           }
 
@@ -336,7 +339,7 @@ async function handleApi(request: Request) {
           const keyDoc = await resolveKey(rawKey);
           if (!keyDoc) return json({ status: "ERROR", error: "BAD_KEY" }, 401);
 
-          if (!keyDoc.unlimited && keyDoc.balance < 49) return json({ status: "ERROR", error: "NO_BALANCE" });
+          if (!keyDoc.unlimited && Number(keyDoc.balance || 0) < NUMBER_PRICE) return json({ status: "ERROR", error: "NO_BALANCE" });
 
           const { getDb } = await import("@/integrations/mongodb/client.server");
           const db = await getDb();
@@ -394,7 +397,7 @@ async function handleApi(request: Request) {
               .collection<ApiKeyDoc>("api_keys")
               .updateOne(
                 { key: hashKey(rawKey) },
-                { $inc: { balance: -49 }, $set: { updated_at: now } },
+                { $inc: { balance: -NUMBER_PRICE }, $set: { updated_at: now } },
               );
           }
 
@@ -406,7 +409,7 @@ async function handleApi(request: Request) {
             service_code: "whatsapp",
             country: "India",
             country_code: "22",
-            price: 49,
+            price: NUMBER_PRICE,
             unlimited: Boolean(keyDoc.unlimited),
           });
         }
@@ -419,7 +422,7 @@ async function handleApi(request: Request) {
           const orderId = p.orderId;
           if (!orderId) return txt("NO_ACTIVATION");
 
-          if (!keyDoc.unlimited && keyDoc.balance < 49) return txt("NO_BALANCE");
+          if (!keyDoc.unlimited && Number(keyDoc.balance || 0) < NUMBER_PRICE) return txt("NO_BALANCE");
 
           const { getDb } = await import("@/integrations/mongodb/client.server");
           const db = await getDb();
@@ -478,7 +481,7 @@ async function handleApi(request: Request) {
               .collection<ApiKeyDoc>("api_keys")
               .updateOne(
                 { key: hashKey(rawKey) },
-                { $inc: { balance: -49 }, $set: { updated_at: now } },
+                { $inc: { balance: -NUMBER_PRICE }, $set: { updated_at: now } },
               );
           }
 
@@ -544,12 +547,18 @@ async function handleApi(request: Request) {
               return txt(`STATUS_OK:${res.code}`);
             }
             if (res.status === "CANCELLED") {
-              await db
+              const cancelled = await db
                 .collection<ApiOrderDoc>("api_orders")
                 .updateOne(
-                  { order_id: orderId },
+                  { order_id: orderId, api_key: hashKey(rawKey), status: "waiting" },
                   { $set: { status: "cancelled", updated_at: new Date() } },
                 );
+              if (cancelled.modifiedCount === 1 && !keyDoc.unlimited) {
+                await db.collection<ApiKeyDoc>("api_keys").updateOne(
+                  { key: hashKey(rawKey) },
+                  { $inc: { balance: NUMBER_PRICE }, $set: { updated_at: new Date() } },
+                );
+              }
               // Put back in unregistered category if that number didn't get an OTP
               if (!numDoc.otp && !order.otp) {
                 await db
@@ -593,6 +602,7 @@ async function handleApi(request: Request) {
           });
           if (!order) return txt("NO_ACTIVATION");
           if (order.status === "ok") return txt("ACCESS_ACTIVATION"); // already has SMS
+          if (order.status === "cancelled") return txt("STATUS_CANCEL");
 
           if (status === "8") {
             // Cancel
@@ -602,9 +612,19 @@ async function handleApi(request: Request) {
               return txt(`EARLY_CANCEL_DENIED:${secondsLeft}`);
             }
             const now = new Date();
-            await db
+            const cancelled = await db
               .collection<ApiOrderDoc>("api_orders")
-              .updateOne({ order_id: orderId }, { $set: { status: "cancelled", updated_at: now } });
+              .updateOne(
+                { order_id: orderId, api_key: hashKey(rawKey), status: "waiting" },
+                { $set: { status: "cancelled", updated_at: now } },
+              );
+            if (cancelled.modifiedCount === 0) return txt("STATUS_CANCEL");
+            const numberDoc = await db
+              .collection<WaCheckNumberDoc>("wa_check_numbers")
+              .findOne({ phone: order.phone });
+            if (numberDoc?.active_order_id) {
+              await cancelFurySmsNumber(numberDoc.active_order_id).catch(() => false);
+            }
             // Restore number to unregistered category (available) if no OTP was received
             if (!order.otp) {
               await db
@@ -628,7 +648,7 @@ async function handleApi(request: Request) {
                 .collection<ApiKeyDoc>("api_keys")
                 .updateOne(
                   { key: hashKey(rawKey) },
-                  { $inc: { balance: 49 }, $set: { updated_at: now } },
+                  { $inc: { balance: NUMBER_PRICE }, $set: { updated_at: now } },
                 );
             }
             return txt("STATUS_CANCEL");
@@ -651,7 +671,7 @@ async function handleApi(request: Request) {
 
         if (action === "getServices") {
           return json({
-            whatsapp: { name: "WhatsApp", price: "49", server: "india" },
+            whatsapp: { name: "WhatsApp", price: String(NUMBER_PRICE), server: "india" },
           });
         }
 

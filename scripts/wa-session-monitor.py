@@ -308,7 +308,8 @@ async def check_one(page, phone):
 async def check_worker(page, queue, busy):
     global is_checking
     while True:
-        phone = await queue.get()
+        work = await queue.get()
+        phone = work["phone"]
         try:
             is_checking = True
             print(f"\n==================================================", flush=True)
@@ -316,7 +317,11 @@ async def check_worker(page, queue, busy):
             result = await check_one(page, phone)
             print(f"🎯 Final check result for {phone}: {result} (is_unregistered={result})", flush=True)
             if result is not None:
-                resp = await asyncio.to_thread(api, "POST", {"phone": phone, "found": result})
+                resp = await asyncio.to_thread(
+                    api,
+                    "POST",
+                    {"phone": phone, "found": result, "claimId": work["claimId"]},
+                )
                 print(f"💾 Saved result to database for {phone}: {resp}", flush=True)
             else:
                 print(f"⚠️ Result unclear for {phone}, leaving pending.", flush=True)
@@ -337,7 +342,7 @@ async def check_loop(page, is_ready):
     while True:
         try:
             ready = is_ready()
-            if ready and queue.qsize() < 1:
+            if ready and queue.qsize() < 1 and not is_checking:
                 data = await asyncio.to_thread(api, "GET")
                 nums = data.get("numbers", [])
                 if nums:
@@ -349,7 +354,7 @@ async def check_loop(page, is_ready):
                 for row in nums:
                     if row["phone"] not in busy:
                         busy.add(row["phone"])
-                        queue.put_nowait(row["phone"])
+                        queue.put_nowait(row)
             elif not ready:
                 import time
                 now = time.time()
@@ -359,32 +364,6 @@ async def check_loop(page, is_ready):
         except Exception as exc:
             print("Queue fetch failed:", type(exc).__name__, exc, flush=True)
         await asyncio.sleep(2)
-    while True:
-        try:
-            connected = is_connected()
-            if connected and queue.qsize() < 1:
-                data = await asyncio.to_thread(api, "GET")
-                nums = data.get("numbers", [])
-                if nums:
-                    print(f"[Queue] Received {len(nums)} pending numbers from database to check.", flush=True)
-                    queue_empty_logged = False
-                elif not queue_empty_logged:
-                    print("[Queue] No pending numbers in database queue right now. Waiting...", flush=True)
-                    queue_empty_logged = True
-                for row in nums:
-                    if row["phone"] not in busy:
-                        busy.add(row["phone"])
-                        queue.put_nowait(row["phone"])
-            elif not connected:
-                import time
-                now = time.time()
-                if now - last_unconnected_log > 15:
-                    print("[Queue] WhatsApp Web is not connected yet; waiting for connection before pulling numbers...", flush=True)
-                    last_unconnected_log = now
-        except Exception as exc:
-            print("Queue fetch failed:", type(exc).__name__, exc, flush=True)
-        await asyncio.sleep(2)
-
 def parse_proxy(raw_line):
     line = raw_line.strip()
     if not line or line.startswith("#"):
@@ -604,6 +583,7 @@ async def main():
             print(f"[{SLOT}] Restored previous session state: {session.get('state')}", flush=True)
         import time
         last_request = time.time() * 1000 - 120000
+        last_logout_report = 0
         logout_checks = 0
         asyncio.create_task(check_loop(page, lambda: is_wa_live))
 
@@ -644,7 +624,14 @@ async def main():
                             status({"state": "error", "error": "WhatsApp logout ho gaya; dobara link karein."})
                             print(f"[{SLOT}] ⚠️ WhatsApp Web has logged out. Please relink at /link", flush=True)
                             await asyncio.to_thread(report, session["id"], "logged_out")
+                            last_logout_report = time.time()
                             last_state_log = "logged_out"
+                    elif session and session.get("state") == "logged_out":
+                        # Retry failed API/Telegram delivery while direct login UI evidence remains.
+                        # Transient network and sync states never enter this branch.
+                        if time.time() - last_logout_report >= 30:
+                            await asyncio.to_thread(report, session["id"], "logged_out")
+                            last_logout_report = time.time()
                     else:
                         if last_state_log != "login_screen":
                             print(f"[{SLOT}] 📱 WhatsApp Web is NOT LINKED yet.", flush=True)

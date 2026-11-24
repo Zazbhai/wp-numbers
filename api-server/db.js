@@ -1,8 +1,6 @@
 import { MongoClient } from "mongodb";
 
-const uri =
-  process.env.MONGODB_URI ||
-  "mongodb+srv://zgarmyofficial_db_user:UKcgptaIfvU5GWeL@cluster0.7a33rwb.mongodb.net/";
+const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
 const dbName = process.env.MONGODB_DB_NAME || "register_checker";
 
 let client = null;
@@ -11,6 +9,10 @@ let connectingPromise = null;
 
 export async function getDb() {
   if (db) return db;
+
+  if (!uri) {
+    throw new Error("Missing MONGODB_URI (or MONGO_URI) environment variable.");
+  }
 
   if (connectingPromise) {
     return connectingPromise;

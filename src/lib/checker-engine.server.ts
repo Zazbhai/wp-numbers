@@ -1,5 +1,5 @@
 import { getDb } from "@/integrations/mongodb/client.server";
-import { requestFurySmsNumber } from "./furysms.server";
+import { cancelFurySmsNumber, requestFurySmsNumber } from "./furysms.server";
 import { ensureMonitor, isRunning } from "./wa-monitor.server";
 import type { WaCheckNumberDoc } from "@/integrations/mongodb/client.server";
 
@@ -28,25 +28,28 @@ async function pullNumbersFromFurySms(count: number, notePrefix: string): Promis
       break;
     }
     const now = new Date();
-    await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateOne(
+    const existing = await db.collection<WaCheckNumberDoc>("wa_check_numbers").findOne(
       { phone: res.phone },
-      {
-        $setOnInsert: { phone: res.phone, created_at: now },
-        $set: {
-          status: "pending",
-          provider_id: res.id,
-          note: `${notePrefix} (${pulled + 1}/${count})`,
-          updated_at: now,
-        },
-        $unset: {
-          owner_user_id: "",
-          active_order_id: "",
-          wallet_purchase_id: "",
-          otp: "",
-        },
-      },
-      { upsert: true }
+      { projection: { status: 1 } },
     );
+    if (existing) {
+      await cancelFurySmsNumber(res.id).catch(() => false);
+      continue;
+    }
+    try {
+      await db.collection<WaCheckNumberDoc>("wa_check_numbers").insertOne({
+        phone: res.phone,
+        status: "pending",
+        provider_id: res.id,
+        note: `${notePrefix} (${pulled + 1}/${count})`,
+        created_at: now,
+        updated_at: now,
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: number })?.code !== 11000) throw error;
+      await cancelFurySmsNumber(res.id).catch(() => false);
+      continue;
+    }
     pulled++;
     if (i < count - 1) {
       await new Promise((r) => setTimeout(r, 600));
@@ -71,36 +74,18 @@ export async function maintainCheckerPipeline(): Promise<{
   try {
     const db = await getDb();
 
-    // 1. Automatically restore any stale cancelled or timed out pending_otp numbers without OTP (> 20 mins) back to available
-    const twentyMinsAgo = new Date(Date.now() - 20 * 60 * 1000);
-    await db.collection<WaCheckNumberDoc>("wa_check_numbers").updateMany(
-      {
-        status: "pending_otp",
-        otp: { $in: [null, ""] },
-        updated_at: { $lt: twentyMinsAgo },
-      },
-      {
-        $set: {
-          status: "available",
-          note: "Cancelled/timed out without OTP (Returned to unregistered category)",
-          active_order_id: null,
-          owner_user_id: null,
-          updated_at: new Date(),
-        },
-      }
-    );
-
-    // 2. Count currently confirmed unregistered numbers in marketplace
+    // Count currently confirmed unregistered numbers in marketplace
     const availableCount = await db.collection<WaCheckNumberDoc>("wa_check_numbers").countDocuments({
       status: { $in: ["available", "sent", "found"] },
+      provider_id: { $exists: true, $nin: [null, ""] },
     });
 
-    // 2. Count numbers currently in queue waiting to be verified
+    // Count numbers currently in queue waiting to be verified
     const pendingCount = await db.collection<WaCheckNumberDoc>("wa_check_numbers").countDocuments({
       status: { $in: ["pending", "pending_verify"] },
     });
 
-    // 3. Ensure WhatsApp monitor is running
+    // Ensure WhatsApp monitor is running
     const monitorRunning = await isRunning(1).catch(() => false);
     if (!monitorRunning) {
       await ensureMonitor(1, false).catch(() => {});
@@ -145,8 +130,13 @@ export async function runHourlyCheckerTask() {
 
   try {
     const db = await getDb();
-    await db.collection("system_settings").updateOne(
-      { _id: "checker_engine_state" as any },
+    await db.collection<{
+      _id: string;
+      lastHourlyRun?: Date | string | number;
+      lastHourlyPullCount?: number;
+      updatedAt?: Date;
+    }>("system_settings").updateOne(
+      { _id: "checker_engine_state" },
       { $set: { lastHourlyRun: new Date(now), lastHourlyPullCount: HOURLY_PULL_COUNT, updatedAt: new Date(now) } },
       { upsert: true }
     );
@@ -181,7 +171,9 @@ export function initCheckerEngine() {
   setTimeout(async () => {
     try {
       const db = await getDb();
-      const state = await db.collection("system_settings").findOne({ _id: "checker_engine_state" as any });
+      const state = await db
+        .collection<{ _id: string; lastHourlyRun?: Date | string | number }>("system_settings")
+        .findOne({ _id: "checker_engine_state" });
       const rawLast = state ? (state["lastHourlyRun"] as Date | string | number | undefined) : undefined;
       const lastRun = rawLast ? new Date(rawLast).getTime() : 0;
       lastHourlyRun = lastRun;

@@ -8,7 +8,6 @@ import {
   getFurySmsBalance,
 } from "./furysms.server";
 import { ensureMonitor, isRunning } from "./wa-monitor.server";
-import { refillPendingNumbers } from "@/routes/api/public/wa-result";
 import type { WaCheckNumberDoc } from "@/integrations/mongodb/client.server";
 import { requireLocalAuth } from "@/integrations/mongodb/local-auth-middleware";
 import { requireAdminAuth } from "./admin-auth.middleware";
@@ -80,6 +79,7 @@ export const listMarketplaceNumbers = createServerFn({ method: "GET" })
         .collection<WaCheckNumberDoc>("wa_check_numbers")
         .find({
           status: { $in: MARKETPLACE_READY_STATUSES },
+          provider_id: { $exists: true, $nin: [null, ""] },
         })
         .sort({ updated_at: -1, created_at: -1 })
         .limit(100)
@@ -782,7 +782,7 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       const count = Math.min(Math.max(data.count, 1), 25);
       const addedPhones: string[] = [];
       let newlyInserted = 0;
-      let recycledExisting = 0;
+      let skippedExisting = 0;
       let lastError = "";
 
       for (let i = 0; i < count; i++) {
@@ -795,24 +795,33 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
         }
 
         const now = new Date();
-        const updateResult = await db.collection("wa_check_numbers").updateOne(
+        const existing = await db.collection<WaCheckNumberDoc>("wa_check_numbers").findOne(
           { phone: res.phone },
-          {
-            $setOnInsert: { phone: res.phone, created_at: now },
-            $set: {
-              status: "pending",
-              provider_id: res.id,
-              note: "Queued for WhatsApp registration check",
-              updated_at: now,
-            },
-          },
-          { upsert: true },
+          { projection: { status: 1 } },
         );
-        if (updateResult.upsertedCount > 0) {
-          newlyInserted++;
-        } else {
-          recycledExisting++;
+        if (existing) {
+          // The provider has already opened a fresh activation for this phone. Do not
+          // overwrite a purchased/completed/queued record; cancel the duplicate activation.
+          await cancelFurySmsNumber(res.id).catch(() => false);
+          skippedExisting++;
+          continue;
         }
+        try {
+          await db.collection<WaCheckNumberDoc>("wa_check_numbers").insertOne({
+            phone: res.phone,
+            status: "pending",
+            provider_id: res.id,
+            note: "Queued for WhatsApp registration check",
+            created_at: now,
+            updated_at: now,
+          });
+        } catch (error: unknown) {
+          if ((error as { code?: number })?.code !== 11000) throw error;
+          await cancelFurySmsNumber(res.id).catch(() => false);
+          skippedExisting++;
+          continue;
+        }
+        newlyInserted++;
         addedPhones.push(res.phone);
         if (i < count - 1) {
           await new Promise((r) => setTimeout(r, 800));
@@ -823,6 +832,15 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       await ensureMonitor(1).catch(() => {});
 
       if (addedPhones.length === 0) {
+        if (skippedExisting > 0) {
+          return {
+            ok: true as const,
+            phones: [],
+            newlyInserted: 0,
+            recycledExisting: 0,
+            note: `${skippedExisting} duplicate provider numbers ko cancel karke existing records preserve kiye gaye.`,
+          };
+        }
         return {
           ok: false as const,
           error: lastError ? `Provider reply: ${lastError}` : "Provider se koi number nahi mila",
@@ -833,19 +851,18 @@ export const fetchNumberFromApi = createServerFn({ method: "POST" })
       if (addedPhones.length < count) {
         noteParts.push(`Provider ne ${addedPhones.length} numbers diye (${count} maange the, Provider reason: ${lastError || "Out of stock"}).`);
       }
-      if (newlyInserted > 0 && recycledExisting > 0) {
-        noteParts.push(`${newlyInserted} naye number Total mein add hue, aur ${recycledExisting} purane number queue mein dobara check ke liye dale gaye.`);
-      } else if (recycledExisting > 0 && newlyInserted === 0) {
-        noteParts.push(`Sabhi ${recycledExisting} number pehle se database mein the (Total count isliye nahi badha, inka status reset ho kar Queue mein check hone ke liye chala gaya).`);
-      } else if (newlyInserted > 0) {
+      if (newlyInserted > 0) {
         noteParts.push(`${newlyInserted} naye number queue mein check hone ke liye add kiye gaye.`);
+      }
+      if (skippedExisting > 0) {
+        noteParts.push(`${skippedExisting} duplicate provider numbers ko cancel karke existing records preserve kiye gaye.`);
       }
 
       return {
         ok: true as const,
         phones: addedPhones,
         newlyInserted,
-        recycledExisting,
+        recycledExisting: 0,
         note: noteParts.join(" "),
       };
     } catch (error) {
@@ -953,7 +970,16 @@ export const recheckNumber = createServerFn({ method: "POST" })
           { phone: data.phone },
           {
             $set: { status: "pending", note: null, updated_at: new Date() },
-            $unset: { owner_user_id: "", active_order_id: "", wallet_purchase_id: "", otp: "" },
+            $unset: {
+              owner_user_id: "",
+              active_order_id: "",
+              wallet_purchase_id: "",
+              otp: "",
+              checker_slot: "",
+              checker_claimed_at: "",
+              checker_claim_until: "",
+              checker_claim_id: "",
+            },
           },
         );
       return { ok: true as const };
@@ -983,6 +1009,10 @@ export const recheckAllUnregistered = createServerFn({ method: "POST" })
             active_order_id: "",
             wallet_purchase_id: "",
             otp: "",
+            checker_slot: "",
+            checker_claimed_at: "",
+            checker_claim_until: "",
+            checker_claim_id: "",
           },
         }
       );
