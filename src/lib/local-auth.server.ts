@@ -11,6 +11,13 @@ import { hashPassword, verifyPassword } from "./local-auth-crypto";
 const SESSION_COOKIE = "wa_local_session";
 const SESSION_SECONDS = 60 * 60 * 24 * 14;
 
+function secureCookiesEnabled() {
+  const configured = process.env["COOKIE_SECURE"]?.trim().toLowerCase();
+  if (configured === "true" || configured === "1") return true;
+  if (configured === "false" || configured === "0") return false;
+  return process.env["NODE_ENV"] === "production";
+}
+
 export interface LocalAuthSession {
   userId: string;
   email: string;
@@ -19,7 +26,7 @@ export interface LocalAuthSession {
 function cookieOptions() {
   return {
     httpOnly: true,
-    secure: process.env["NODE_ENV"] === "production",
+    secure: secureCookiesEnabled(),
     sameSite: "lax" as const,
     path: "/",
     maxAge: SESSION_SECONDS,

@@ -155,6 +155,12 @@ CHECK_WORKERS = 1
 
 is_wa_live = False
 is_checking = False
+browser_crashed = False
+
+def is_browser_crash(exc):
+    """Detect Playwright errors that mean the page renderer is unusable."""
+    message = str(exc).lower()
+    return any(marker in message for marker in ("target crashed", "browser has been closed", "page has been closed"))
 
 async def check_one(page, phone):
     """Returns True (not on WhatsApp), False (on WhatsApp) or None (unclear, keep pending).
@@ -163,6 +169,7 @@ async def check_one(page, phone):
     and re-verify before concluding unregistered. Also performs pre-check cleanup to ensure
     no stale modal from previous checks can bleed into the current number check.
     """
+    global browser_crashed, is_wa_live
     clean_phone = phone.lstrip('+')
     url = f"https://web.whatsapp.com/send?phone={clean_phone}"
 
@@ -198,6 +205,9 @@ async def check_one(page, phone):
             await asyncio.sleep(0.8)
     except Exception as e:
         print(f"[{phone}] Navigation failed: {e}", flush=True)
+        if is_browser_crash(e):
+            browser_crashed = True
+            is_wa_live = False
         return None
 
     first_trigger_at = None
@@ -306,7 +316,7 @@ async def check_one(page, phone):
     return None
 
 async def check_worker(page, queue, busy):
-    global is_checking
+    global is_checking, is_wa_live, browser_crashed
     while True:
         work = await queue.get()
         phone = work["phone"]
@@ -327,6 +337,12 @@ async def check_worker(page, queue, busy):
                 print(f"⚠️ Result unclear for {phone}, leaving pending.", flush=True)
             print(f"==================================================\n", flush=True)
         except Exception as exc:
+            if is_browser_crash(exc):
+                # A dead renderer is an inconclusive check, never evidence of logout.
+                # The supervisor loop exits so systemd can restart Chromium.
+                browser_crashed = True
+                is_wa_live = False
+                print(f"[Monitor] Browser page crashed during number check; leaving {phone} pending.", flush=True)
             import traceback
             print(f"❌ Check failed for {phone}: {exc}", flush=True)
             traceback.print_exc()
@@ -520,7 +536,7 @@ def terminate_existing_monitor():
     pid_file.write_text(str(os.getpid()))
 
 async def main():
-    global is_wa_live
+    global is_wa_live, browser_crashed
     DIR.mkdir(parents=True, exist_ok=True)
     print(f"[{SLOT}] [1/4] Starting WhatsApp Session Monitor (PID {os.getpid()})...", flush=True)
     terminate_existing_monitor()
@@ -591,6 +607,8 @@ async def main():
         sync_tick = 0
         while True:
             sync_tick += 1
+            if browser_crashed:
+                raise RuntimeError("WhatsApp browser renderer crashed; restarting monitor process")
             try:
                 # If a number check is in progress on this page, do not interfere with page locators
                 if is_checking:
@@ -733,6 +751,11 @@ async def main():
                 elif not connected and current_state() == "qr":
                     await capture_qr(page, None)
             except Exception as exc:
+                if is_browser_crash(exc):
+                    browser_crashed = True
+                    is_wa_live = False
+                    status({"state": "error", "error": "WhatsApp browser crashed; monitor restarting."})
+                    print("[Monitor] Browser page crashed; it will not be reported as logout.", flush=True)
                 print("Monitor check failed:", type(exc).__name__, flush=True)
                 import traceback
                 traceback.print_exc()

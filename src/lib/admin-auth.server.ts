@@ -5,6 +5,13 @@ import { isValidAdminKey } from "./business-lines.server";
 export const ADMIN_COOKIE_NAME = "wa_admin_auth";
 export const ADMIN_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
+function secureCookiesEnabled() {
+  const configured = process.env["COOKIE_SECURE"]?.trim().toLowerCase();
+  if (configured === "true" || configured === "1") return true;
+  if (configured === "false" || configured === "0") return false;
+  return process.env["NODE_ENV"] === "production";
+}
+
 export function getExpectedAdminToken(): string {
   const secret = process.env["BUSINESS_LINES_ADMIN_KEY"] || "";
   if (!secret) return "";
@@ -76,7 +83,7 @@ export async function setAdminSessionCookie(valid: boolean): Promise<boolean> {
   try {
     setCookie(ADMIN_COOKIE_NAME, token, {
       httpOnly: true,
-      secure: process.env["NODE_ENV"] === "production",
+      secure: secureCookiesEnabled(),
       sameSite: "lax",
       path: "/",
       maxAge: ADMIN_COOKIE_MAX_AGE,
