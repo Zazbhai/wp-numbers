@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { getLocalAuthSession, signInLocal, signUpLocal } from "@/lib/auth.functions";
+import { getLocalAuthSession } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -50,12 +50,24 @@ function LoginPage() {
 
     try {
       if (mode === "login") {
-        const result = await signInLocal({ data: { email, password } });
-        if (!result.ok) throw new Error(result.error);
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ email, password }),
+        });
+        const result = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Unable to sign in. Try again.");
         await navigate({ to: redirect });
       } else {
-        const result = await signUpLocal({ data: { email, password } });
-        if (!result.ok) throw new Error(result.error);
+        const response = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ email, password }),
+        });
+        const result = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Could not create your account. Try again.");
         await navigate({ to: redirect });
       }
     } catch (authError) {

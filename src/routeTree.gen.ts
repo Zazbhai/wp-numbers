@@ -20,6 +20,8 @@ import { Route as ApiV1RouteImport } from './routes/api/v1'
 import { Route as NumbersIndexRouteImport } from './routes/numbers/index'
 import { Route as NumbersAdminRouteImport } from './routes/numbers/admin'
 import { Route as NumbersRecentRouteImport } from './routes/numbers/recent'
+import { Route as ApiAuthLoginRouteImport } from './routes/api/auth/login'
+import { Route as ApiAuthSignupRouteImport } from './routes/api/auth/signup'
 import { Route as ApiBusinessLinesAdminRouteImport } from './routes/api/business-lines.admin'
 import { Route as ApiPublicWaLinkRouteImport } from './routes/api/public/wa-link'
 import { Route as ApiPublicWaResultRouteImport } from './routes/api/public/wa-result'
@@ -81,6 +83,16 @@ const NumbersRecentRoute = NumbersRecentRouteImport.update({
   path: '/numbers/recent',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSignupRoute = ApiAuthSignupRouteImport.update({
+  id: '/api/auth/signup',
+  path: '/api/auth/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBusinessLinesAdminRoute = ApiBusinessLinesAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -120,6 +132,8 @@ export interface FileRoutesByFullPath {
   '/numbers/admin': typeof NumbersAdminRoute
   '/numbers/recent': typeof NumbersRecentRoute
   '/numbers/': typeof NumbersIndexRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/signup': typeof ApiAuthSignupRoute
   '/api/business-lines/admin': typeof ApiBusinessLinesAdminRoute
   '/api/public/wa-link': typeof ApiPublicWaLinkRoute
   '/api/public/wa-result': typeof ApiPublicWaResultRoute
@@ -138,6 +152,8 @@ export interface FileRoutesByTo {
   '/numbers/admin': typeof NumbersAdminRoute
   '/numbers/recent': typeof NumbersRecentRoute
   '/numbers': typeof NumbersIndexRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/signup': typeof ApiAuthSignupRoute
   '/api/business-lines/admin': typeof ApiBusinessLinesAdminRoute
   '/api/public/wa-link': typeof ApiPublicWaLinkRoute
   '/api/public/wa-result': typeof ApiPublicWaResultRoute
@@ -157,6 +173,8 @@ export interface FileRoutesById {
   '/numbers/admin': typeof NumbersAdminRoute
   '/numbers/recent': typeof NumbersRecentRoute
   '/numbers/': typeof NumbersIndexRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/signup': typeof ApiAuthSignupRoute
   '/api/business-lines/admin': typeof ApiBusinessLinesAdminRoute
   '/api/public/wa-link': typeof ApiPublicWaLinkRoute
   '/api/public/wa-result': typeof ApiPublicWaResultRoute
@@ -177,6 +195,8 @@ export interface FileRouteTypes {
     | '/numbers/admin'
     | '/numbers/recent'
     | '/numbers/'
+    | '/api/auth/login'
+    | '/api/auth/signup'
     | '/api/business-lines/admin'
     | '/api/public/wa-link'
     | '/api/public/wa-result'
@@ -195,6 +215,8 @@ export interface FileRouteTypes {
     | '/numbers/admin'
     | '/numbers/recent'
     | '/numbers'
+    | '/api/auth/login'
+    | '/api/auth/signup'
     | '/api/business-lines/admin'
     | '/api/public/wa-link'
     | '/api/public/wa-result'
@@ -213,6 +235,8 @@ export interface FileRouteTypes {
     | '/numbers/admin'
     | '/numbers/recent'
     | '/numbers/'
+    | '/api/auth/login'
+    | '/api/auth/signup'
     | '/api/business-lines/admin'
     | '/api/public/wa-link'
     | '/api/public/wa-result'
@@ -232,6 +256,8 @@ export interface RootRouteChildren {
   NumbersAdminRoute: typeof NumbersAdminRoute
   NumbersRecentRoute: typeof NumbersRecentRoute
   NumbersIndexRoute: typeof NumbersIndexRoute
+  ApiAuthLoginRoute: typeof ApiAuthLoginRoute
+  ApiAuthSignupRoute: typeof ApiAuthSignupRoute
   ApiPublicWaLinkRoute: typeof ApiPublicWaLinkRoute
   ApiPublicWaResultRoute: typeof ApiPublicWaResultRoute
   ApiPublicWaSessionRoute: typeof ApiPublicWaSessionRoute
@@ -317,6 +343,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NumbersRecentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/signup': {
+      id: '/api/auth/signup'
+      path: '/api/auth/signup'
+      fullPath: '/api/auth/signup'
+      preLoaderRoute: typeof ApiAuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/business-lines/admin': {
       id: '/api/business-lines/admin'
       path: '/admin'
@@ -378,6 +418,8 @@ const rootRouteChildren: RootRouteChildren = {
   NumbersAdminRoute: NumbersAdminRoute,
   NumbersRecentRoute: NumbersRecentRoute,
   NumbersIndexRoute: NumbersIndexRoute,
+  ApiAuthLoginRoute: ApiAuthLoginRoute,
+  ApiAuthSignupRoute: ApiAuthSignupRoute,
   ApiPublicWaLinkRoute: ApiPublicWaLinkRoute,
   ApiPublicWaResultRoute: ApiPublicWaResultRoute,
   ApiPublicWaSessionRoute: ApiPublicWaSessionRoute,

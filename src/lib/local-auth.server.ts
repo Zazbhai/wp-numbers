@@ -8,8 +8,8 @@ import {
 } from "@/integrations/mongodb/client.server";
 import { hashPassword, verifyPassword } from "./local-auth-crypto";
 
-const SESSION_COOKIE = "wa_local_session";
-const SESSION_SECONDS = 60 * 60 * 24 * 14;
+export const SESSION_COOKIE = "wa_local_session";
+export const SESSION_SECONDS = 60 * 60 * 24 * 14;
 
 function secureCookiesEnabled() {
   const configured = process.env["COOKIE_SECURE"]?.trim().toLowerCase();
@@ -31,6 +31,11 @@ function cookieOptions() {
     path: "/",
     maxAge: SESSION_SECONDS,
   };
+}
+
+export function sessionCookieHeader(token: string) {
+  const secure = secureCookiesEnabled();
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; SameSite=Lax${secure ? "; Secure" : ""}`;
 }
 
 function hashToken(token: string) {
@@ -61,7 +66,7 @@ export async function createLocalAccount(
 
   await db.collection<LocalUserDoc>("local_users").insertOne(newDoc);
 
-  await createLocalSession(userId.toHexString());
+  return createLocalSession(userId.toHexString());
 }
 
 export async function signInLocalAccount(email: string, password: string) {
@@ -76,8 +81,7 @@ export async function signInLocalAccount(email: string, password: string) {
     );
   }
 
-  await createLocalSession(user._id.toHexString());
-  return true;
+  return createLocalSession(user._id.toHexString());
 }
 
 async function createLocalSession(userId: string) {
@@ -94,6 +98,7 @@ async function createLocalSession(userId: string) {
   } catch {
     // ignore outside http request context
   }
+  return token;
 }
 
 export async function getLocalSession(): Promise<LocalAuthSession | null> {
